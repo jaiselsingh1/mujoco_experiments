@@ -26,6 +26,7 @@ noise_scale = 0.05 # for policy updates
 for episode in 1:num_episodes
     policies = []
     rewards = [] 
+    trajectories = []
 
     for i in 1:num_trajectories
         # get one or more trajectories and their reward -> add noise every time to the policy 
@@ -49,8 +50,9 @@ for episode in 1:num_episodes
             angle_reward = cos(data.qpos[2]) # cos(pole angle)
             pos_penalty = 0.1 * abs(data.qpos[1]) #keep the cart centered
             reward = angle_reward - pos_penalty
-
             total_reward += reward 
+
+            push!(trajectories, data)
         end 
     end 
     
