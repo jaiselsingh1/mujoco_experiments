@@ -4,12 +4,12 @@ using LinearAlgebra
 
 model = load_model("cartpole.xml")
 data = init_data(model)
-num_observations = model.qpos + model.qvel # number of observable states 
+num_observations = 2*model.nq # number of observable states 
 num_actions = model.nu # number of actuators 
 
-base_policy = zeros(num_observations, num_actions)
+base_policy = mj_zeros(num_observations, num_actions)
 best_reward = -Inf
-best_policy = base_policy
+best_policy = copy(base_policy)
 
 num_trajectories = 10 
 num_episodes = 100 # total training episodes 
