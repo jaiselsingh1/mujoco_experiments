@@ -68,9 +68,10 @@ for episode in 1:num_episodes
 
     gradient = zeros(size(base_policy))
     for i in 1:num_trajectories
-    noise = policies[i] - base_policy 
-    gradient += noise*rewards[i]
+        noise = policies[i] - base_policy 
+        gradient += noise*rewards[i]
     end 
+    
     base_policy += learning_rate * gradient/num_trajectories 
 
     if episode % 10 == 0
