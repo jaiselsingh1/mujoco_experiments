@@ -1,15 +1,16 @@
 using MuJoCo 
 using Flux 
 using LinearAlgebra 
+using Statistics
 
 model = load_model("cartpole.xml")
 data = init_data(model)
 num_observations = 2*model.nq # number of observable states 
 num_actions = model.nu # number of actuators 
 
-base_policy = mj_zeros(num_observations, num_actions)
-best_reward = -Inf
-best_policy = copy(base_policy)
+base_policy = mj_zeros(num_actions, num_observations)
+global best_reward = -Inf
+global best_policy = copy(base_policy)
 
 num_trajectories = 10 
 num_episodes = 100 # total training episodes 
@@ -40,10 +41,10 @@ for episode in 1:num_episodes
         for step in 1:max_steps 
             # get reward/ observations (multiply with policy to get actions -> apply actions to sample_model_and_data)
             # step forward in time (get trajectory/ get reward)
-            observations = vcat(model.qpos, model.qvel) 
+            observation = vcat(data.qpos, data.qvel) 
             action = policy * observation #simple linear policy
 
-            data.ctrl .= clamp(action, -1.0, 1.0)
+            data.ctrl .= clamp.(action, -1.0, 1.0)
         
             mj_step(model, data)
 
@@ -53,8 +54,8 @@ for episode in 1:num_episodes
             total_reward += reward 
 
             if reward >= best_reward
-                best_reward = reward
-                best_policy = copy(policy)
+                global best_reward = reward
+                global best_policy .= copy(policy)
             end
 
         end 
@@ -69,10 +70,10 @@ for episode in 1:num_episodes
     gradient = zeros(size(base_policy))
     for i in 1:num_trajectories
         noise = policies[i] - base_policy 
-        gradient += noise*rewards[i]
+        gradient .+= noise .* rewards[i]
     end 
     
-    base_policy += learning_rate * gradient/num_trajectories 
+    base_policy .+= learning_rate * gradient/num_trajectories 
 
     if episode % 10 == 0
         println("Episode $episode, Avg Reward: $(mean(rewards)), Best: $best_reward")
