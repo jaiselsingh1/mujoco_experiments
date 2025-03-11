@@ -109,12 +109,6 @@ function trained_policy_controller!(m::Model, d::Data)
     nothing
 end
 
-# Visualize the trained policy
-println("\nTraining complete! Visualizing the trained policy...")
-# Reset to random position away from target
-mj_resetData(model, data)
-data.qpos[1] = 0.2 * (rand() - 0.5)  # Random x position
-data.qpos[2] = 0.2 * (rand() - 0.5)  # Random y position
 
 init_visualiser()
 visualise!(model, data, controller = trained_policy_controller!)
