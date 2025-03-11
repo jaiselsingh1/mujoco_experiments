@@ -19,7 +19,7 @@ global best_reward = -Inf
 global best_policy = copy(base_policy)
 global best_total_reward = -Inf  # best total trajectory reward 
 
-num_trajectories = 2*length(base_policy) #10 
+num_trajectories = 2*length(base_policy) # proportional to the number of parameters in the policy 
 num_episodes = 500 # total training episodes 
 max_steps = 500 # maximum steps per trajectory 
 noise_scale = 0.05 # for policy updates
