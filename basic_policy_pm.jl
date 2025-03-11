@@ -1,0 +1,120 @@
+using MuJoCo 
+using Flux 
+using LinearAlgebra 
+using Statistics
+
+model = load_model("point_mass.xml")
+data = init_data(model)
+num_observations = 2*model.nq # number of observable states 
+num_actions = model.nu # number of actuators 
+
+base_policy = 0.01 * randn(num_actions, num_observations) # not starting with zeros 
+global best_reward = -Inf
+global best_policy = copy(base_policy)
+global best_total_reward = -Inf  # best total trajectory reward 
+
+num_trajectories = 10 
+num_episodes = 100 # total training episodes 
+max_steps = 1000 # maximum steps per trajectory 
+noise_scale = 0.1 # for policy updates
+learning_rate = 0.02
+
+for episode in 1:num_episodes
+    global base_policy, best_policy, best_reward, best_total_reward 
+    policies = []
+    rewards = [] 
+    episode_best_reward = -Inf
+
+    for i in 1:num_trajectories
+        # get one or more trajectories and their reward -> add noise every time to the policy 
+        mj_resetData(model, data)
+
+        # random placement of the pointmass for exploration 
+        data.qpos[1] = 0.2 * (rand() - 0.5) 
+        data.qpos[2] = 0.2 * (rand() - 0.5)
+
+
+        policy = base_policy .+ randn(size(base_policy)) * noise_scale
+        push!(policies, policy)
+
+        total_reward = 0.0
+
+        for step in 1:max_steps 
+            # get reward/ observations (multiply with policy to get actions -> apply actions to sample_model_and_data)
+            # step forward in time (get trajectory/ get reward)
+            observation = vcat(data.qpos, data.qvel) 
+            if size(observation, 2) != 1
+                observation = reshape(observation, :, 1) # make it into a column vector 
+            end 
+
+            action = policy * observation #simple linear policy
+
+            data.ctrl .= clamp.(action, -1.0, 1.0)
+        
+            mj_step(model, data)
+
+            x_pos = data.qpos[1]
+            y_pos = data.qpos[2]
+
+            # let the origin be the target 
+            dist_target = sqrt(x_pos^2 + y_pos^2)
+
+            # higher reward for closer to target 
+            position_reward = exp(-5.0 * dist_target)
+
+            # small penalty for high velocity (for smooth movement)
+            velocity_penalty = 0.05 * (data.qvel[1]^2 + data.qvel[2]^2)
+
+            # Small penalty for large control inputs (for energy efficiency)
+            control_penalty = 0.01 * sum(abs.(data.ctrl))
+
+            # combined reward
+            step_reward = position_reward - velocity_penalty - control_penalty
+            
+            total_reward += step_reward 
+
+        end 
+        push!(rewards, total_reward)
+
+        if total_reward > best_total_reward
+            best_total_reward = total_reward 
+            best_policy = copy(policy)
+            println("New best policy found Reward: $best_total_reward")
+        end 
+
+        if total_reward > episode_best_reward
+            episode_best_reward = total_reward 
+        end 
+
+    end 
+    normalized_rewards = (rewards .- mean(rewards)) ./ (std(rewards) + 1e-8)
+    
+
+    gradient = zeros(size(base_policy))
+    for i in 1:num_trajectories
+        noise = policies[i] - base_policy 
+        gradient .+= noise .* normalized_rewards[i]
+    end 
+    
+    base_policy .+= learning_rate * gradient/num_trajectories 
+
+    if episode % 5 == 0 || episode == 1
+        println("Episode $episode | Avg Reward: $(mean(rewards)) | Best Episode: $episode_best_reward | All-time Best: $best_total_reward")
+    end
+end 
+
+function trained_policy_controller!(m::Model, d::Data)
+    state = vcat(d.qpos, d.qvel)
+    d.ctrl .= clamp.(best_policy * state, -1.0, 1.0)
+    nothing
+end
+
+# Visualize the trained policy
+println("\nTraining complete! Visualizing the trained policy...")
+# Reset to random position away from target
+mj_resetData(model, data)
+data.qpos[1] = 0.2 * (rand() - 0.5)  # Random x position
+data.qpos[2] = 0.2 * (rand() - 0.5)  # Random y position
+
+init_visualiser()
+visualise!(model, data, controller = trained_policy_controller!)

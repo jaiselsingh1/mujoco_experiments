@@ -56,7 +56,7 @@ for episode in 1:num_episodes
             mj_step(model, data)
 
             pole_angle = data.qpos[2]
-            cart_post = data.qpos[1] 
+            cart_pos = data.qpos[1] 
             
             angle_reward = cos(pole_angle) # straight angle is better hence reward for the theta to be close to 0 
             pos_penalty = 0.1 * abs(cart_pos)  # Small penalty for distance from center
