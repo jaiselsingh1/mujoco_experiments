@@ -1,23 +1,28 @@
 using MuJoCo 
-using Flux 
+# using Flux 
 using LinearAlgebra 
 using Statistics
+using UnicodePlots
 
 model = load_model("cartpole.xml")
 data = init_data(model)
+
+init_qpos = copy(data.qpos)
+init_qvel = copy(data.qvel)
+
 num_observations = 2*model.nq # number of observable states 
 num_actions = model.nu # number of actuators 
 
-base_policy = 0.01 * randn(num_actions, num_observations) # not starting with zeros 
+base_policy = 0.0 * randn(num_actions, num_observations) 
 global best_reward = -Inf
 global best_policy = copy(base_policy)
 global best_total_reward = -Inf  # best total trajectory reward 
 
-num_trajectories = 10 
+num_trajectories = 2*length(base_policy)
 num_episodes = 100 # total training episodes 
 max_steps = 1000 # maximum steps per trajectory 
-noise_scale = 0.1 # for policy updates
-learning_rate = 0.02
+noise_scale = 0.5 # for policy updates
+learning_rate = 0.03
 
 # outermost is training loop -> policy parameters change per steps
 # outer for loop -> sampling policies 
@@ -26,20 +31,23 @@ learning_rate = 0.02
 # Training loop is outermost where the policy params change through steps. 
 # Outer loop is sampling policies. Inter loop is using policy to get trajectories
 
+
+ep_rewards = Float64[]
 for episode in 1:num_episodes
     global base_policy, best_policy, best_reward, best_total_reward 
     policies = []
-    rewards = [] 
+    rewards = Float64[] 
     episode_best_reward = -Inf
 
     for i in 1:num_trajectories
         # get one or more trajectories and their reward -> add noise every time to the policy 
-        mj_resetData(model, data)
+        data.qpos .= init_qpos  # better to use this than the mj_reset() which is slow 
+        data.qvel .= init_qvel 
+
         policy = base_policy .+ randn(size(base_policy)) * noise_scale
         push!(policies, policy)
 
         total_reward = 0.0
-        trajectory_rewards = []
 
         for step in 1:max_steps 
             # get reward/ observations (multiply with policy to get actions -> apply actions to sample_model_and_data)
@@ -73,8 +81,6 @@ for episode in 1:num_episodes
                 total_reward += 10.0 # to reach the last step give a reward  
             end 
         end 
-        push!(rewards, total_reward)
-
         if total_reward > best_total_reward
             best_total_reward = total_reward 
             best_policy = copy(policy)
@@ -85,21 +91,26 @@ for episode in 1:num_episodes
             episode_best_reward = total_reward 
         end 
 
+        push!(rewards, episode_best_reward)
     end 
     
 
     #combine -> weight all the policies with the rewards generated to approximate a gradient direction and take a step 
     # training loop 
     normalized_rewards = (rewards .- mean(rewards)) ./ (std(rewards) + 1e-8)
+    push!(ep_rewards, mean(rewards))
     
-
     gradient = zeros(size(base_policy))
     for i in 1:num_trajectories
         noise = policies[i] - base_policy 
         gradient .+= noise .* normalized_rewards[i]
     end 
     
+    display(heatmap(base_policy))
     display(gradient)
+    display(lineplot(ep_rewards))
+
+
     base_policy .+= learning_rate * gradient/num_trajectories 
 
     if episode % 5 == 0 || episode == 1
@@ -113,6 +124,8 @@ function trained_policy_controller!(m::Model, d::Data)
     nothing
 end
 
+
+mj_resetData(model, data)
 init_visualiser()
 visualise!(model, data, controller = trained_policy_controller!)
 
