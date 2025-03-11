@@ -15,9 +15,9 @@ global best_total_reward = -Inf  # best total trajectory reward
 
 num_trajectories = 10 
 num_episodes = 100 # total training episodes 
-max_steps = 1000 # maximum steps per trajectory 
-noise_scale = 0.1 # for policy updates
-learning_rate = 0.02
+max_steps = 500 # maximum steps per trajectory 
+noise_scale = 0.2 # for policy updates
+learning_rate = 0.05
 
 for episode in 1:num_episodes
     global base_policy, best_policy, best_reward, best_total_reward 
@@ -60,13 +60,16 @@ for episode in 1:num_episodes
             dist_target = sqrt(x_pos^2 + y_pos^2)
 
             # higher reward for closer to target 
-            position_reward = exp(-5.0 * dist_target)
+            position_reward = exp(-10.0 * dist_target)
+            # println("position reward $position_reward")
 
             # small penalty for high velocity (for smooth movement)
-            velocity_penalty = 0.05 * (data.qvel[1]^2 + data.qvel[2]^2)
+            velocity_penalty = 0.01 * (data.qvel[1]^2 + data.qvel[2]^2)
+            # println("velocity penalty $velocity_penalty")
 
             # Small penalty for large control inputs (for energy efficiency)
-            control_penalty = 0.01 * sum(abs.(data.ctrl))
+            control_penalty = 0.005 * sum(abs.(data.ctrl))
+            # println("control penalty $control_penalty")
 
             # combined reward
             step_reward = position_reward - velocity_penalty - control_penalty
@@ -110,5 +113,9 @@ function trained_policy_controller!(m::Model, d::Data)
 end
 
 
+
+mj_resetData(model, data)
+data.qpos[1] = 0.2  # random initial poisitions for test 
+data.qpos[2] = 0.2 
 init_visualiser()
 visualise!(model, data, controller = trained_policy_controller!)
