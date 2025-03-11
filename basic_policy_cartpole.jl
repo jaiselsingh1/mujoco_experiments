@@ -99,6 +99,7 @@ for episode in 1:num_episodes
         gradient .+= noise .* normalized_rewards[i]
     end 
     
+    display(gradient)
     base_policy .+= learning_rate * gradient/num_trajectories 
 
     if episode % 5 == 0 || episode == 1
