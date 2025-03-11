@@ -14,7 +14,7 @@ init_qvel = copy(data.qvel)
 num_observations = 2*model.nq # number of observable states 
 num_actions = model.nu # number of actuators 
 
-base_policy = 0.0 * randn(num_actions, num_observations) # not starting with zeros 
+base_policy = 0.0 * randn(num_actions, num_observations) 
 global best_reward = -Inf
 global best_policy = copy(base_policy)
 global best_total_reward = -Inf  # best total trajectory reward 
