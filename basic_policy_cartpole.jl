@@ -52,11 +52,8 @@ for episode in 1:num_episodes
         for step in 1:max_steps 
             # get reward/ observations (multiply with policy to get actions -> apply actions to sample_model_and_data)
             # step forward in time (get trajectory/ get reward)
-            observation = vcat(data.qpos, data.qvel) 
-            if size(observation, 2) != 1
-                observation = reshape(observation, :, 1) # make it into a column vector 
-            end 
-
+            observation = [data.qpos[1], data.qpos[2], data.qvel[1], data.qvel[2]]
+            
             action = policy * observation #simple linear policy
 
             data.ctrl .= clamp.(action, -1.0, 1.0)
@@ -76,11 +73,8 @@ for episode in 1:num_episodes
             step_reward = angle_reward - pos_penalty - angle_vel_penalty - pos_vel_penalty
             
             total_reward += step_reward 
-            
-            if step == max_steps
-                total_reward += 10.0 # to reach the last step give a reward  
-            end 
         end 
+
         if total_reward > best_total_reward
             best_total_reward = total_reward 
             best_policy = copy(policy)
