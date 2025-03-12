@@ -13,12 +13,15 @@ init_qvel = copy(data.qvel)
 
 num_observations = 2*model.nq # number of observable states 
 num_actions = model.nu # number of actuators 
-
+num_features = 10*num_observations # based on the scale of the number of observations
+global W = randn(num_features, num_observations)
+global b = randn(num_features) * (2*π - π)
 
 base_policy = 0.0 * randn(num_features, num_observations) 
 global best_reward = -Inf
 global best_policy = copy(base_policy)
 global best_total_reward = -Inf  # best total trajectory reward 
+
 
 num_trajectories = 2*length(base_policy)
 num_episodes = 100 # total training episodes 
@@ -26,17 +29,10 @@ max_steps = 1000 # maximum steps per trajectory
 noise_scale = 0.05 # for policy updates
 learning_rate = 0.3
 
-# outermost is training loop -> policy parameters change per steps
-# outer for loop -> sampling policies 
-# inner for loop ->  using policies to get trajectories
-
-# Training loop is outermost where the policy params change through steps. 
-# Outer loop is sampling policies. Inter loop is using policy to get trajectories
-
-
+ 
 ep_rewards = Float64[]
 for episode in 1:num_episodes
-    global base_policy, best_policy, best_reward, best_total_reward, fourier_order
+    global base_policy, best_policy, best_reward, best_total_reward, fourier_order, W, b 
     policies = []
     rewards = Float64[] 
     episode_best_reward = -Inf
@@ -54,10 +50,10 @@ for episode in 1:num_episodes
         for step in 1:max_steps 
             # get reward/ observations (multiply with policy to get actions -> apply actions to sample_model_and_data)
             # step forward in time (get trajectory/ get reward)
-            state = vcat(data.qpos, data.qvel)
-            features = fourier_features(state, fourier_order) # 3rd order to start 
-            
-            action = policy * weights # weight matrix is the number of features per state essentially 
+            state = vcat(data.qpos, data.qvel) 
+            observation = sin.(W*state + b) 
+
+            action = policy * observation 
 
             data.ctrl .= clamp.(action, -1.0, 1.0)
         
