@@ -13,7 +13,28 @@ init_qvel = copy(data.qvel)
 num_observations = 2*model.nq # number of observable states 
 num_actions = model.nu # number of actuators 
 
-base_policy = 0.0 * randn(num_actions, num_observations) 
+function feature_dim(state_dim, order)
+    return 1 + state_dim * 2 * order
+end 
+
+global fourier_order = 3 
+feature_size = feature_dim(num_observations, fourier_order)
+
+
+function fourier_features(state, order)
+    features = [1.0] # constant that's always needed 
+    normalized_state = state ./ [1.0, 1.0, 1.0, 1.0]
+    for i in 1:order
+        for j in 1:length(state)
+            push!(features, cos(π * i * normalized_state[j]))
+            push!(features, sin(π * i * normalized_state[j]))
+        end 
+    end 
+    return features 
+end 
+
+
+base_policy = 0.0 * randn(num_actions, feature_size) 
 global best_reward = -Inf
 global best_policy = copy(base_policy)
 global best_total_reward = -Inf  # best total trajectory reward 
@@ -34,7 +55,7 @@ learning_rate = 0.03
 
 ep_rewards = Float64[]
 for episode in 1:num_episodes
-    global base_policy, best_policy, best_reward, best_total_reward 
+    global base_policy, best_policy, best_reward, best_total_reward, fourier_order
     policies = []
     rewards = Float64[] 
     episode_best_reward = -Inf
@@ -53,9 +74,9 @@ for episode in 1:num_episodes
             # get reward/ observations (multiply with policy to get actions -> apply actions to sample_model_and_data)
             # step forward in time (get trajectory/ get reward)
             state = vcat(data.qpos, data.qvel)
-            features = fourier_features(state, 3) # 3rd order to start 
+            features = fourier_features(state, fourier_order) # 3rd order to start 
             
-            action = policy * features #simple linear policy
+            action = policy * features # fourier feature network to capture any non-linearities 
 
             data.ctrl .= clamp.(action, -1.0, 1.0)
         
@@ -115,24 +136,10 @@ end
 
 function trained_policy_controller!(m::Model, d::Data)
     state = vcat(d.qpos, d.qvel)
-    d.ctrl .= clamp.(best_policy * state, -1.0, 1.0)
+    feature_vector = fourier_features(state, fourier_order)
+    d.ctrl .= clamp.(best_policy * feature_vector, -1.0, 1.0)
     nothing
 end
-
-
-function fourier_features(state, order)
-    
-    features = [1.0] # constant that's always needed 
-    normalized_state = state ./ [1.0, 1.0, 1.0, 1.0]
-    for i in in 1:order
-        for j in 1:length(state)
-            push!(features, cos(π * i * normalized_state[j]))
-            push!(features, sin(π * i * normalized_state[j]))
-        end 
-    end 
-
-    return features 
-end 
 
 mj_resetData(model, data)
 init_visualiser()
