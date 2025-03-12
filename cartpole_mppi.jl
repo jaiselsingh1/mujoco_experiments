@@ -16,28 +16,41 @@ const λ = 0
 nx = 2 * model.nx # number of states
 nu = model.nu # number of controls 
 
+global U_t = zeros(nu, T-1) # global controls 
+
 
 init_state = vcat(data.qpos, data.qvel)
 S = zeros(size(ϵ, K))
 
-for k in 0:K-1 
-    state = copy(init_state)
-    
-    ϵ = randn(K, T-1)
 
-    for t in 1:T 
+function rollout(m::model, d::data)
 
-        state = mjstep!(data, model)
-        S .+= running_cost(data) + (λ.* (data.ctrl)' .* ϵ)  
-    end
+    for k in 0:K-1 
+        state = copy(init_state)
+        
+        ϵ = randn(K, T-1)
 
-    S .+= terminal_cost(data)
+        for t in 1:T 
+            d.ctrl .= U_t[:, t] + noise
+            state = mjstep!(data, model)
+            S .+= running_cost(data) + (λ.* (data.ctrl)' .* ϵ)  
+        end
+        S .+= terminal_cost(data)
+    end 
+
 end 
+
+β = minimum(S)
+η = 
 
 for k in 0:K-1
-    weights = 
+    weights = zeros(size(ϵ), K)
+    weights .+= 1/η .* exp(-1 / λ (S .- β))
 end 
 
+for t in 1:T-1
+    U_t .+= weights .* ϵ
+end 
 
 
 function terminal_cost(data)
@@ -55,5 +68,4 @@ function running_cost(data)
     q =  10*x^2 + (500*(cos(θ)+ 1)^2) + x_dot^2 + 15*(θ_dot^2)
     return q 
 end 
-
 
