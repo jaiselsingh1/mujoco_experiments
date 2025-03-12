@@ -38,38 +38,35 @@ global U_t = zeros(nu, T) # global controls
 
 init_state = vcat(data.qpos, data.qvel)
 
-function rollout(m::model, d::data)
 
+for k in 1:K
+    state = copy(init_state)
+    qpos = state.qpos 
+    qvel = state.qvel
+
+    ϵ = randn(K, T)
+    S = zeros(size(ϵ, K))  # costs
+     # weights = zeros(size(ϵ), K)
+
+    for t in 1:T 
+        noise = randn(nu, T)
+        d.ctrl .= U_t[:, t] + noise
+        state = mjstep!(data, model)
+        S .+= running_cost(data) + (λ.* (data.ctrl)' .* ϵ)  
+    end
+    S .+= terminal_cost(data)
+
+    β = minimum(S)
+    weights = exp.(-1 / λ * (S .- β))
+    η = sum(weights) # eta is just a weight summation 
     for k in 1:K
-        state = copy(init_state)
-        qpos = state.qpos 
-        qvel = state.qvel
-
-        ϵ = randn(K, T)
-        S = zeros(size(ϵ, K))  # costs
-        # weights = zeros(size(ϵ), K)
-
-        for t in 1:T 
-            noise = randn(nu, T)
-            d.ctrl .= U_t[:, t] + noise
-            state = mjstep!(data, model)
-            S .+= running_cost(data) + (λ.* (data.ctrl)' .* ϵ)  
-        end
-        S .+= terminal_cost(data)
-
-        β = minimum(S)
-        weights = exp.(-1 / λ * (S .- β))
-        η = sum(weights) # eta is just a weight summation 
-
-        for k in 1:K
-            weights ./= η
-        end 
-
-        for t in 1:T
-            U_t .+= (sum(weights)*noise for k in 1:K)
-        end 
-
+        weights ./= η
     end 
+
+    for t in 1:T
+        U_t .+= (sum(weights)*noise for k in 1:K)
+    end 
+
 end 
 
 

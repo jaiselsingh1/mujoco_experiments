@@ -13,11 +13,11 @@ init_qvel = copy(data.qvel)
 
 num_observations = 2*model.nq # number of observable states 
 num_actions = model.nu # number of actuators 
-num_features = 10*num_observations # based on the scale of the number of observations
+num_features = 20*num_observations # based on the scale of the number of observations
 global W = randn(num_features, num_observations)
-global b = randn(num_features) .* (2*π - π)
+global b = rand(num_features) .* (2*π - π)  # rand is between 0 and 1 
 
-base_policy = 0.0 * randn(num_actions, num_observations) 
+base_policy = 0.0 * randn(num_actions, num_features)  
 global best_reward = -Inf
 global best_policy = copy(base_policy)
 global best_total_reward = -Inf  # best total trajectory reward 
@@ -55,7 +55,7 @@ for episode in 1:num_episodes
 
             action = policy * observation 
 
-            data.ctrl .= clamp.(action, -1.0, 1.0)
+            data.ctrl .= clamp.(action, -10.0, 10.0)
         
             mj_step(model, data)
 
@@ -112,7 +112,7 @@ end
 
 function trained_policy_controller!(m::Model, d::Data)
     state = vcat(d.qpos, d.qvel)
-    d.ctrl .= clamp.(best_policy * state, -1.0, 1.0)
+    d.ctrl .= clamp.(best_policy * state, -10.0, 10.0)
     nothing
 end
 
