@@ -52,9 +52,10 @@ for episode in 1:num_episodes
         for step in 1:max_steps 
             # get reward/ observations (multiply with policy to get actions -> apply actions to sample_model_and_data)
             # step forward in time (get trajectory/ get reward)
-            observation = [data.qpos[1], data.qpos[2], data.qvel[1], data.qvel[2]]
+            state = vcat(data.qpos, data.qvel)
+            features = fourier_features(state, 3) # 3rd order to start 
             
-            action = policy * observation #simple linear policy
+            action = policy * features #simple linear policy
 
             data.ctrl .= clamp.(action, -1.0, 1.0)
         
@@ -118,6 +119,20 @@ function trained_policy_controller!(m::Model, d::Data)
     nothing
 end
 
+
+function fourier_features(state, order)
+    
+    features = [1.0] # constant that's always needed 
+    normalized_state = state ./ [1.0, 1.0, 1.0, 1.0]
+    for i in in 1:order
+        for j in 1:length(state)
+            push!(features, cos(π * i * normalized_state[j]))
+            push!(features, sin(π * i * normalized_state[j]))
+        end 
+    end 
+
+    return features 
+end 
 
 mj_resetData(model, data)
 init_visualiser()
