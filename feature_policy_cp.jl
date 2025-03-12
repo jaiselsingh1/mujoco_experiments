@@ -51,7 +51,7 @@ for episode in 1:num_episodes
             # get reward/ observations (multiply with policy to get actions -> apply actions to sample_model_and_data)
             # step forward in time (get trajectory/ get reward)
             state = vcat(data.qpos, data.qvel) 
-            observation = sin.(W .* state .+ b) 
+            observation = sin.(W * state .+ b) 
 
             action = policy * observation 
 

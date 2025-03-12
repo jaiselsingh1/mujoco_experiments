@@ -20,37 +20,36 @@ global U_t = zeros(nu, T-1) # global controls
 
 
 init_state = vcat(data.qpos, data.qvel)
-S = zeros(size(ϵ, K))
-
 
 function rollout(m::model, d::data)
 
     for k in 0:K-1 
         state = copy(init_state)
-        
+        qpos = state.qpos 
+        qvel = state.qvel
+
         ϵ = randn(K, T-1)
+        S = zeros(size(ϵ, K))  # cost function 
+        weights = zeros(size(ϵ), K)
 
         for t in 1:T 
+            noise = randn(nu, T-1)
             d.ctrl .= U_t[:, t] + noise
             state = mjstep!(data, model)
             S .+= running_cost(data) + (λ.* (data.ctrl)' .* ϵ)  
+        
+        
         end
+
+        β = minimum(S)
+        η = 
+        weights .+= 1/η .* exp(-1 / λ (S .- β))
         S .+= terminal_cost(data)
     end 
 
 end 
 
-β = minimum(S)
-η = 
 
-for k in 0:K-1
-    weights = zeros(size(ϵ), K)
-    weights .+= 1/η .* exp(-1 / λ (S .- β))
-end 
-
-for t in 1:T-1
-    U_t .+= weights .* ϵ
-end 
 
 
 function terminal_cost(data)
