@@ -15,9 +15,9 @@ num_observations = 2*model.nq # number of observable states
 num_actions = model.nu # number of actuators 
 num_features = 10*num_observations # based on the scale of the number of observations
 global W = randn(num_features, num_observations)
-global b = randn(num_features) * (2*π - π)
+global b = randn(num_features) .* (2*π - π)
 
-base_policy = 0.0 * randn(num_features, num_observations) 
+base_policy = 0.0 * randn(num_actions, num_observations) 
 global best_reward = -Inf
 global best_policy = copy(base_policy)
 global best_total_reward = -Inf  # best total trajectory reward 
@@ -51,7 +51,7 @@ for episode in 1:num_episodes
             # get reward/ observations (multiply with policy to get actions -> apply actions to sample_model_and_data)
             # step forward in time (get trajectory/ get reward)
             state = vcat(data.qpos, data.qvel) 
-            observation = sin.(W*state + b) 
+            observation = sin.(W .* state .+ b) 
 
             action = policy * observation 
 
@@ -89,7 +89,6 @@ for episode in 1:num_episodes
     
 
     #combine -> weight all the policies with the rewards generated to approximate a gradient direction and take a step 
-    # training loop 
     normalized_rewards = (rewards .- mean(rewards)) ./ (std(rewards) + 1e-8)
     push!(ep_rewards, mean(rewards))
     
@@ -113,8 +112,7 @@ end
 
 function trained_policy_controller!(m::Model, d::Data)
     state = vcat(d.qpos, d.qvel)
-    feature_vector = fourier_features(state, fourier_order)
-    d.ctrl .= clamp.(best_policy * feature_vector, -1.0, 1.0)
+    d.ctrl .= clamp.(best_policy * state, -1.0, 1.0)
     nothing
 end
 
