@@ -16,55 +16,68 @@ const λ = 0
 nx = 2 * model.nx # number of states
 nu = model.nu # number of controls 
 
-global U_t = zeros(nu, T-1) # global controls 
+function terminal_cost(data)
+    return 10*running_cost(data)
+end 
+
+
+function running_cost(d::data)
+    q = zeros(K)
+    x = d.qpos[1]
+    θ = d.qpos[2]
+    x_dot = d.qvel[1]
+    θ_dot = d.qvel[2]
+    q =  10*x^2 + (500*(cos(θ)+ 1)^2) + x_dot^2 + 15*(θ_dot^2) #direct cost function that is described in the paper
+
+    return q 
+end 
+
+
+global U_t = zeros(nu, T) # global controls 
 
 
 init_state = vcat(data.qpos, data.qvel)
 
 function rollout(m::model, d::data)
 
-    for k in 0:K-1 
+    for k in 1:K
         state = copy(init_state)
         qpos = state.qpos 
         qvel = state.qvel
 
-        ϵ = randn(K, T-1)
-        S = zeros(size(ϵ, K))  # cost function 
-        weights = zeros(size(ϵ), K)
+        ϵ = randn(K, T)
+        S = zeros(size(ϵ, K))  # costs
+        # weights = zeros(size(ϵ), K)
 
         for t in 1:T 
-            noise = randn(nu, T-1)
+            noise = randn(nu, T)
             d.ctrl .= U_t[:, t] + noise
             state = mjstep!(data, model)
             S .+= running_cost(data) + (λ.* (data.ctrl)' .* ϵ)  
-        
-        
         end
+        S .+= terminal_cost(data)
 
         β = minimum(S)
-        η = 
-        weights .+= 1/η .* exp(-1 / λ (S .- β))
-        S .+= terminal_cost(data)
+        weights = exp.(-1 / λ * (S .- β))
+        η = sum(weights) # eta is just a weight summation 
+
+        for k in 1:K
+            weights ./= η
+        end 
+
+        for t in 1:T
+            U_t .+= (sum(weights)*noise for k in 1:K)
+        end 
+
     end 
-
 end 
 
 
-
-
-function terminal_cost(data)
+function mppi_controller!(m::model, d::data)
+    state = vcat(d.qpos, d.qvel)
+    d.ctrl .= U_t
 
 end 
 
-
-
-function running_cost(data)
-    q = zeros(K)
-    x = data.qpos[1]
-    θ = data.qpos[2]
-    x_dot = data.qvel[1]
-    θ_dot = data.qvel[2]
-    q =  10*x^2 + (500*(cos(θ)+ 1)^2) + x_dot^2 + 15*(θ_dot^2)
-    return q 
-end 
-
+init_visualizer()
+visualise!(model, data, controller = mppi_controller!)
