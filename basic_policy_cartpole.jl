@@ -14,7 +14,7 @@ num_observations = 2*model.nq # number of observable states
 num_actions = model.nu # number of actuators 
 
 function feature_dim(state_dim, order)
-    return 1 + state_dim * 2 * order
+    return 1 + state_dim * 2 * order # there are 2 features per state per order 
 end 
 
 global fourier_order = 3 
@@ -42,8 +42,8 @@ global best_total_reward = -Inf  # best total trajectory reward
 num_trajectories = 2*length(base_policy)
 num_episodes = 100 # total training episodes 
 max_steps = 1000 # maximum steps per trajectory 
-noise_scale = 0.5 # for policy updates
-learning_rate = 0.03
+noise_scale = 0.05 # for policy updates
+learning_rate = 0.3
 
 # outermost is training loop -> policy parameters change per steps
 # outer for loop -> sampling policies 
