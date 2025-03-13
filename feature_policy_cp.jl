@@ -13,22 +13,22 @@ init_qvel = copy(data.qvel)
 
 num_observations = 2*model.nq # number of observable states 
 num_actions = model.nu # number of actuators 
-num_features = 20*num_observations # based on the scale of the number of observations
-global W = randn(num_features, num_observations)
-global b = rand(num_features) .* (2*π - π)  # rand is between 0 and 1 
+num_features = 30*num_observations # based on the scale of the number of observations
+
+bandwidth = 1.2  #lower bandwidth means smoother transitions 
+global W = randn(num_features, num_observations) * bandwidth 
+global b = rand(num_features) .* 2*π .- π  # rand is between 0 and 1 
 
 base_policy = 0.0 * randn(num_actions, num_features)  
 global best_reward = -Inf
 global best_policy = copy(base_policy)
 global best_total_reward = -Inf  # best total trajectory reward 
 
-
 num_trajectories = 2*length(base_policy)
 num_episodes = 100 # total training episodes 
 max_steps = 1000 # maximum steps per trajectory 
-noise_scale = 0.05 # for policy updates
+noise_scale = 0.2 # for policy updates
 learning_rate = 0.3
-
  
 ep_rewards = Float64[]
 for episode in 1:num_episodes
@@ -55,14 +55,14 @@ for episode in 1:num_episodes
 
             action = policy * observation 
 
-            data.ctrl .= clamp.(action, -10.0, 10.0)
+            data.ctrl .= clamp.(action, -1.0, 1.0)
         
             mj_step(model, data)
 
             pole_angle = data.qpos[2]
             cart_pos = data.qpos[1] 
             
-            angle_reward = cos(pole_angle) # straight angle is better hence reward for the theta to be close to 0 
+            angle_reward = 2.0 * cos(pole_angle) # straight angle is better hence reward for the theta to be close to 0 
             pos_penalty = 0.1 * abs(cart_pos)  # Small penalty for distance from center
             
             angle_vel_penalty = 0.05 * abs(data.qvel[2])  # Penalize fast angle changes
@@ -112,7 +112,8 @@ end
 
 function trained_policy_controller!(m::Model, d::Data)
     state = vcat(d.qpos, d.qvel)
-    d.ctrl .= clamp.(best_policy * state, -10.0, 10.0)
+    observation = sin.(W * state .+ b)
+    d.ctrl .= clamp.(best_policy * observation, -1.0, 1.0)
     nothing
 end
 
