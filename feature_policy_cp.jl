@@ -32,7 +32,7 @@ learning_rate = 0.3
  
 ep_rewards = Float64[]
 for episode in 1:num_episodes
-    global base_policy, best_policy, best_reward, best_total_reward, fourier_order, W, b 
+    global base_policy, best_policy, best_reward, best_total_reward, W, b 
     policies = []
     rewards = Float64[] 
     episode_best_reward = -Inf

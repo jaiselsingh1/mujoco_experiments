@@ -123,7 +123,7 @@ end
 
 function trained_policy_controller!(m::Model, d::Data)
     state = vcat(d.qpos, d.qvel)
-    d.ctrl .= clamp.(base_policy * state, -1.0, 1.0)
+    d.ctrl .= clamp.(best_policy * state, -1.0, 1.0)
     nothing
 end
 
