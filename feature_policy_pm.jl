@@ -8,13 +8,14 @@ data = init_data(model)
 
 num_observations = 2*model.nq   # this can be any size but ideally it can be of any size like an image has everything 
 num_actions = model.nu 
-num_features = 20*num_observations 
+num_features = 10*num_observations 
 
 mj_resetData(model, data)
 init_qpos = copy(data.qpos)
 init_qvel = copy(data.qvel)
 
-global W = randn(num_features, num_observations)
+bandwidth = 0.5 
+global W = randn(num_features, num_observations) * bandwidth
 global b = rand(num_features) .* 2π .- π
 base_policy = 0.0 * randn(num_actions, num_features)
 
@@ -26,8 +27,8 @@ num_trajectories = 2*length(base_policy) # based on simplex methods or finite di
 # you can have n samples for a policy of a specific length 
 num_episodes = 100 
 max_steps = 1000 
-noise_scale = 0.1
-learning_rate = 0.3
+noise_scale = 0.05
+learning_rate = 0.2
 
 ep_rewards = Float64[]
 for episode in 1:num_episodes
@@ -72,7 +73,7 @@ for episode in 1:num_episodes
             total_reward += step_reward 
         end 
 
-        if total_reward > best_total_reward
+        if total_reward > mean(best_total_reward)
             best_total_reward = total_reward 
             best_policy = copy(policy)
             println("New best policy found Reward: $best_total_reward")
