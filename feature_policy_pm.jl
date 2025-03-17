@@ -53,7 +53,6 @@ for episode in 1:num_episodes
         total_reward = 0.0 
 
         for j in 1:max_steps
-        
             state = vcat(data.qpos, data.qvel)
             observation = sin.(W * state .+ b)
 
@@ -68,12 +67,12 @@ for episode in 1:num_episodes
             position_reward = -dist_target
             velocity_penalty = 0.01 * (data.qvel[1]^2 + data.qvel[2]^2)
             control_penalty = 0.005 * sum(abs.(data.ctrl))
-            step_reward = position_reward # - velocity_penalty - control_penalty 
+            step_reward = position_reward - velocity_penalty - control_penalty 
 
             total_reward += step_reward 
         end 
 
-        if total_reward > mean(best_total_reward)
+        if total_reward > best_total_reward
             best_total_reward = total_reward 
             best_policy = copy(policy)
             println("New best policy found Reward: $best_total_reward")
@@ -86,8 +85,10 @@ for episode in 1:num_episodes
         push!(rewards, episode_best_reward)
     end 
 
+
     normalized_rewards = (rewards .- mean(rewards)) ./ (std(rewards) + 1e-8)
     push!(ep_rewards, mean(rewards)) #mean from the reward gathered in the trajectory
+
 
     gradient = zeros(size(base_policy))
     for i in 1:num_trajectories
