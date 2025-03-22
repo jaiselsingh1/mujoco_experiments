@@ -27,15 +27,102 @@ num_trajectories = 2*length(base_policy) # based on simplex methods or finite di
 # you can have n samples for a policy of a specific length 
 num_episodes = 100 
 max_steps = 1000 
-noise_scale = 0.05
+noise_scale = 0.1
 learning_rate = 0.2
 
 ep_rewards = Float64[]
 for episode in 1:num_episodes
+    global base_policy, best_policy, best_total_reward, W, b
+    policies = []
+    rewards = Float64[]
+    episode_best_reward = -Inf  # Track best reward for this episode
+    
+    for i in 1:num_trajectories
+        policy = base_policy .+ randn(size(base_policy))*noise_scale
+        push!(policies, policy)
+        
+        data.qpos .= init_qpos
+        data.qvel .= init_qvel
+        data.qpos[1] = 0.2 * (rand() - 0.5)
+        data.qpos[2] = 0.2 * (rand() - 0.5)
+        
+        total_reward = 0.0
+        for j in 1:max_steps
+            state = vcat(data.qpos, data.qvel)
+            observation = sin.(W * state .+ b)
+            action = policy * observation
+            data.ctrl .= clamp.(action, -1.0, 1.0)
+            step!(model, data)
+            
+            x = data.qpos[1]
+            y = data.qpos[2]
+            dist_target = sqrt(x^2 + y^2)
+            position_reward = -dist_target
+            velocity_penalty = 0.01 * (data.qvel[1]^2 + data.qvel[2]^2)
+            control_penalty = 0.005 * sum(abs.(data.ctrl))
+            step_reward = position_reward - velocity_penalty # - control_penalty
+            total_reward += step_reward
+        end
+        
+        # Track best reward in this episode
+        if total_reward > episode_best_reward
+            episode_best_reward = total_reward
+        end
+        
+        # Track all-time best
+        if total_reward > best_total_reward
+            best_total_reward = total_reward
+            best_policy = copy(policy)
+            println("New best policy found! Reward: $best_total_reward")
+        end
+        
+        push!(rewards, total_reward)
+    end
+    
+    # Only perform visualizations periodically to speed up training
+    if episode % 10 == 0
+        display(heatmap(base_policy))
+        display(lineplot(ep_rewards))
+    end
+    
+    # Calculate advantage (how much better each trajectory was than average)
+    normalized_rewards = (rewards .- mean(rewards)) ./ (std(rewards) + 1e-8)
+    push!(ep_rewards, mean(rewards))
+    
+    # Policy gradient update
+    gradient = zeros(size(base_policy))
+    for i in 1:num_trajectories
+        noise = policies[i] - base_policy
+        gradient .+= noise .* normalized_rewards[i]
+    end
+    
+    base_policy .+= learning_rate * gradient/num_trajectories
+    
+    if episode % 5 == 0 || episode == 1
+        println("Episode $episode | Avg Reward: $(mean(rewards)) | Best Episode: $episode_best_reward | All-time Best: $best_total_reward")
+    end
+end
+
+function trained_policy_controller!(m::Model, d::Data)
+    state = vcat(d.qpos, d.qvel)
+    observation = sin.(W * state .+ b)
+    d.ctrl .= clamp.(best_policy * observation, -1.0, 1.0)
+    nothing
+end
+
+
+mj_resetData(model, data)
+data.qpos[1] = 0.2  # random initial poisitions for test 
+data.qpos[2] = 0.2 
+init_visualiser()
+visualise!(model, data, controller = trained_policy_controller!)
+
+#=
+for episode in 1:num_episodes
     global base_policy, best_policy, best_total_reward, W, b 
     policies = []
     rewards = Float64[]
-    episode_best_reward = -Inf 
+    episode_reward = -Inf 
 
     for i in 1:num_trajectories 
 
@@ -67,7 +154,7 @@ for episode in 1:num_episodes
             position_reward = -dist_target
             velocity_penalty = 0.01 * (data.qvel[1]^2 + data.qvel[2]^2)
             control_penalty = 0.005 * sum(abs.(data.ctrl))
-            step_reward = position_reward - velocity_penalty - control_penalty 
+            step_reward = position_reward - velocity_penalty #- control_penalty 
 
             total_reward += step_reward 
         end 
@@ -78,11 +165,8 @@ for episode in 1:num_episodes
             println("New best policy found Reward: $best_total_reward")
         end 
 
-        if total_reward > episode_best_reward
-            episode_best_reward = total_reward 
-        end 
-
-        push!(rewards, episode_best_reward)
+        episode_reward = total_reward
+        push!(rewards, episode_reward)
     end 
 
 
@@ -105,20 +189,8 @@ for episode in 1:num_episodes
         println("Episode $episode | Avg Reward: $(mean(rewards)) | Best Episode: $episode_best_reward | All-time Best: $best_total_reward")
     end
 end 
+=#
 
-function trained_policy_controller!(m::Model, d::Data)
-    state = vcat(d.qpos, d.qvel)
-    observation = sin.(W * state .+ b)
-    d.ctrl .= clamp.(best_policy * observation, -1.0, 1.0)
-    nothing
-end
-
-
-mj_resetData(model, data)
-data.qpos[1] = 0.2  # random initial poisitions for test 
-data.qpos[2] = 0.2 
-init_visualiser()
-visualise!(model, data, controller = trained_policy_controller!)
 
 
 
