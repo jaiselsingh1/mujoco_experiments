@@ -20,7 +20,6 @@ global W = randn(num_features, num_observations) * bandwidth
 global b = rand(num_features) .* 2*π .- π  # rand is between 0 and 1 
 
 base_policy = 0.0 * randn(num_actions, num_features)  
-global best_reward = -Inf
 global best_policy = copy(base_policy)
 global best_total_reward = -Inf  # best total trajectory reward 
 
@@ -57,7 +56,7 @@ for episode in 1:num_episodes
 
             data.ctrl .= clamp.(action, -1.0, 1.0)
         
-            mj_step(model, data)
+            step!(model, data)
 
             pole_angle = data.qpos[2]
             cart_pos = data.qpos[1] 
@@ -74,17 +73,17 @@ for episode in 1:num_episodes
             total_reward += step_reward 
         end 
 
+        if total_reward > episode_best_reward
+            episode_best_reward = total_reward
+        end 
+
         if total_reward > best_total_reward
             best_total_reward = total_reward 
             best_policy = copy(policy)
-            println("New best policy found Reward: $best_total_reward")
+            println("New best policy found! Reward: $best_total_reward")
         end 
 
-        if total_reward > episode_best_reward
-            episode_best_reward = total_reward 
-        end 
-
-        push!(rewards, episode_best_reward)
+        push!(rewards, total_reward)
     end 
     
 
