@@ -19,7 +19,7 @@ global W = randn(num_features, num_observations) * bandwidth
 global b = rand(num_features) .* 2π .- π
 base_policy = 0.0 * randn(num_actions, num_features)
 
-global best_reward = -Inf #common to use -Inf when you're trying to max any value 
+#common to use -Inf when you're trying to max any value 
 global best_policy = copy(base_policy)
 global best_total_reward = -Inf 
 
@@ -32,7 +32,7 @@ learning_rate = 0.2
 
 ep_rewards = Float64[]
 for episode in 1:num_episodes
-    global base_policy, best_policy, best_reward, best_total_reward, W, b 
+    global base_policy, best_policy, best_total_reward, W, b 
     policies = []
     rewards = Float64[]
     episode_best_reward = -Inf 
