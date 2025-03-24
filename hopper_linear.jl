@@ -38,12 +38,24 @@ for episode in 1:num_episodes
             observation = vcat(data.qpos, data.qvel)
             action = policy * observation
             data.ctrl .= clamp.(action, -1.0, 1.0)
-            torso_prev = data.qpos[1]
+
             step!(model, data)
+            alive_bonus = 1.0 
+            upright_reward = 1.0 - abs(data.qpos[3])  # higher reward when angle is closer to zero
+            target_height = 1.0 
+            height_reward = 1.0 - abs(data.qpos[2] - target_height)
+            stay_still_reward = -0.1 * abs(data.qvel[1])  # penalize horizontal velocity
+            energy_penalty = -0.01 * sum(x->x^2, data.ctrl)
+
+            total_reward += alive_bonus + upright_reward + height_reward + stay_still_reward - energy_penalty
+
+            #=
             alive_bonus = 1.0
-            total_reward += (data.qpos[1] - torso_prev) / model.opt.timestep
+            total_reward += data.qvel[1]
             total_reward += alive_bonus
             total_reward -= 1e-3 * sum(x->x^2, action) # summing the square of each action component
+            =#
+
         end
         
         if total_reward > best_reward
