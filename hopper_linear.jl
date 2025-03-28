@@ -1,6 +1,7 @@
 using MuJoCo
 using UnicodePlots
 using Statistics
+using LinearAlgebra
 
 model = load_model("hopper.xml")
 data = init_data(model)
@@ -40,22 +41,30 @@ for episode in 1:num_episodes
             data.ctrl .= clamp.(action, -1.0, 1.0)
 
             step!(model, data)
-            alive_bonus = 1.0 
-            upright_reward = 1.0 - abs(data.qpos[3])  # higher reward when angle is closer to zero
-            target_height = 1.0 
-            height_reward = 1.0 - abs(data.qpos[2] - target_height)
-            stay_still_reward = -0.1 * abs(data.qvel[1])  # penalize horizontal velocity
-            energy_penalty = -0.01 * sum(x->x^2, data.ctrl)
+            height = data.qpos[2]
+            t_height = 0.85 
+            if height > t_height
+                total_reward += upright_bonus
+                total_reward += data.qvel[1]*4
+            else
+                total_reward -= t_height-height
+            end
+            total_reward -= 1e-3 * norm(data.ctrl)^2
+            
+            #= 
+            # COM based reward 
+            torso_position = data.xpos[:, 1]
+            foot_position = data.xpos[:, 3]
 
-            total_reward += alive_bonus + upright_reward + height_reward + stay_still_reward - energy_penalty
+            torso_x = torso_position[1]
+            foot_x = foot_position[1]
+            balance_reward = -0.2 * abs(torso_x - foot_x)
 
-            #=
-            alive_bonus = 1.0
-            total_reward += data.qvel[1]
-            total_reward += alive_bonus
-            total_reward -= 1e-3 * sum(x->x^2, action) # summing the square of each action component
-            =#
-
+            energy_penalty = -0.001 * (data.qpos[4]^2 + data.qpos[5]^2 + data.qpos[6]^2 + data.qpos[7]^2)  # penalize any angle deviations for joints 
+            target_height = 0.0 
+            height_reward = -0.1 * abs(data.qpos[2] - target_height) # data.qpos[2] is rootz 
+            velocity_reward = -0.1 * abs(data.qvel[1])
+            =# 
         end
         
         if total_reward > best_reward
