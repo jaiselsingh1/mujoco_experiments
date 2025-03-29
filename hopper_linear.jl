@@ -17,8 +17,8 @@ learning_rate = 0.2
 base_policy = 0.0 * randn(num_actions, num_observations)
 global best_policy = copy(base_policy)
 global best_reward = -Inf
-num_trajectories = 5*length(base_policy)
-num_episodes = 500
+num_trajectories = 2*length(base_policy)
+num_episodes = 1000
 max_steps = 500
 ep_rewards = Float64[]
 
@@ -26,8 +26,8 @@ ep_rewards = Float64[]
 function perturb_state!(data, init_qpos, init_qvel, pertubation_scale = 0.02)
     data.qpos .= copy(init_qpos)
     data.qvel .= copy(init_qvel)
-    data.qpos[4,:] .+= pertubation_scale * randn(size(data.qpos[4,:]))
-    data.qvel .+= pertubation_scale * randn(size(data.qvel[4,:]))
+    data.qpos .+= pertubation_scale * randn(size(data.qpos[4:end]))
+    data.qvel .+= pertubation_scale * randn(size(data.qvel[4:end]))
     nothing 
 end 
 
