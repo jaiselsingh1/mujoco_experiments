@@ -26,8 +26,9 @@ ep_rewards = Float64[]
 function perturb_state!(data, init_qpos, init_qvel, pertubation_scale = 0.02)
     data.qpos .= copy(init_qpos)
     data.qvel .= copy(init_qvel)
-    data.qpos .+= pertubation_scale * randn(size(data.qpos[4:end]))
-    data.qvel .+= pertubation_scale * randn(size(data.qvel[4:end]))
+    joint_angles = data.qpos[4:end]
+    data.qpos[4:end] .+= pertubation_scale * randn(size(joint_angles))
+    data.qvel .+= pertubation_scale * randn(size(data.qvel))
     nothing 
 end 
 
@@ -49,6 +50,7 @@ for episode in 1:num_episodes
             data.ctrl .= clamp.(action, -1.0, 1.0)
 
             step!(model, data)
+            upright_bonus = 1.0 
             height = data.qpos[2]
             t_height = 0.85 
             if height > t_height
