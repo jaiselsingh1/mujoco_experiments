@@ -12,18 +12,18 @@ init_qpos = copy(data.qpos) # to use within the loop to reset the data
 init_qvel = copy(data.qvel)
 num_observations = 2*model.nq
 num_actions = model.nu
-noise_scale = 0.05
+noise_scale = 0.1
 learning_rate = 0.2
 base_policy = 0.0 * randn(num_actions, num_observations)
 global best_policy = copy(base_policy)
 global best_reward = -Inf
 num_trajectories = 2*length(base_policy)
-num_episodes = 1000
+num_episodes = 1500
 max_steps = 500
 ep_rewards = Float64[]
 
 
-function perturb_state!(data, init_qpos, init_qvel, pertubation_scale = 0.02)
+function perturb_state!(data, init_qpos, init_qvel, pertubation_scale = 0.1)
     data.qpos .= copy(init_qpos)
     data.qvel .= copy(init_qvel)
     joint_angles = data.qpos[4:end]
@@ -39,7 +39,7 @@ for episode in 1:num_episodes
     episode_best_reward = -Inf
     
     for traj in 1:num_trajectories
-        perturb_state!(data, init_qpos, init_qvel, 0.02)
+        perturb_state!(data, init_qpos, init_qvel, 0.1)
         policy = base_policy .+ randn(size(base_policy)).*noise_scale
         push!(policies, policy)
         total_reward = 0.0
