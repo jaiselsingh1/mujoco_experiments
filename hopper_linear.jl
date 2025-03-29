@@ -32,6 +32,44 @@ function perturb_state!(data, init_qpos, init_qvel, pertubation_scale = 0.1)
     nothing 
 end 
 
+function stand_reward(data)
+    reward = 0.0 
+    upright_bonus = 1.0 
+    height = data.qpos[2]
+    t_height = 0.85 
+    if height > t_height
+        reward += upright_bonus
+        reward += abs(data.qvel[1]-2)  #data.qvel[1]*4
+    else
+        reward -= t_height-height
+    end
+    reward -= 1e-3 * norm(data.ctrl)^2
+
+    return reward 
+end 
+
+function hop_reward(data)
+    reward = 0.0
+    
+    min_height = 0.7
+    height = data.qpos[2]
+    if height > min_height
+        reward += 1.0
+    else
+        reward -= min_height - height
+    end
+
+    forward_vel = data.qvel[1]
+    target_velocity = 2.0
+    if forward_vel > 0
+        reward += 1.0 * forward_vel  # reward a forward movement 
+    end
+
+    reward -= 1e-3 * norm(data.ctrl)^2
+
+    return reward 
+end 
+
 for episode in 1:num_episodes
     global best_policy, best_reward
     policies = []
@@ -50,16 +88,7 @@ for episode in 1:num_episodes
             data.ctrl .= clamp.(action, -1.0, 1.0)
 
             step!(model, data)
-            upright_bonus = 1.0 
-            height = data.qpos[2]
-            t_height = 0.85 
-            if height > t_height
-                total_reward += upright_bonus
-                total_reward += data.qvel[1]*4
-            else
-                total_reward -= t_height-height
-            end
-            total_reward -= 1e-3 * norm(data.ctrl)^2
+            total_reward += hop_reward(data)
             
             #= 
             # COM based reward 
