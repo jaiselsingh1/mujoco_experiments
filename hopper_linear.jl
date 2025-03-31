@@ -2,6 +2,8 @@ using MuJoCo
 using UnicodePlots
 using Statistics
 using LinearAlgebra
+using Threads 
+Threads.set_num_threads(4)
 
 model = load_model("hopper.xml")
 data = init_data(model)
@@ -36,12 +38,12 @@ function stand_reward(data)
     reward = 0.0 
     upright_bonus = 1.0 
     height = data.qpos[2]
-    t_height = 0.85 
+    t_height = 0.0 
     if height > t_height
         reward += upright_bonus
         reward += abs(data.qvel[1]-2)  #data.qvel[1]*4
     else
-        reward -= t_height-height
+        reward -= abs(t_height-height)
     end
     reward -= 1e-3 * norm(data.ctrl)^2
 
@@ -51,44 +53,51 @@ end
 function hop_reward(data)
     reward = 0.0
     
-    min_height = 0.7
+    #= 
+    upright_bonus = 1.0 
     height = data.qpos[2]
-    if height > min_height
-        reward += 1.0
-    else
-        reward -= min_height - height
-    end
+    t_height = 0 
 
-    forward_vel = data.qvel[1]
-    target_velocity = 2.0
-    if forward_vel > 0
-        reward += 1.0 * forward_vel  # reward a forward movement 
-    end
-
-    reward -= 1e-3 * norm(data.ctrl)^2
-
+    if height > t_height 
+        reward += upright_bonus
+    else 
+        reward -= abs(height-t_height)
+    end 
+    =#
+    reward += data.qvel[1]    
     return reward 
 end 
 
 for episode in 1:num_episodes
     global best_policy, best_reward
-    policies = []
-    rewards = Float64[]
+    policies = Vector{typeof(base_policy)}(undef, num_trajectories) # pre allocates the memory (vector is just a 1d Array)
+    rewards = zeros(Float64, num_trajectories)
     episode_best_reward = -Inf
-    
-    for traj in 1:num_trajectories
-        perturb_state!(data, init_qpos, init_qvel, 0.1)
+
+    thread_datas = [init_data(model) for _ in 1:Threads.nthreads()]
+
+    Threads.@threads for traj in 1:num_trajectories
+
+        t_id = Threads.threadid()
+        local_data = thread.datas[t_id]
+
+        local_data.qpos .= copy(init_qpos)
+        local_data.qvel .= copy(init_qvel)
+        perturb_state!(local_data, init_qpos, init_qvel, 0.1)
+
+
         policy = base_policy .+ randn(size(base_policy)).*noise_scale
-        push!(policies, policy)
+        policies[traj] = policy 
         total_reward = 0.0
         
         for step in 1:max_steps
-            observation = vcat(data.qpos, data.qvel)
+            observation = vcat(local_data.qpos, local_data.qvel)
+            observation[3] = sin(observation[3])
             action = policy * observation
-            data.ctrl .= clamp.(action, -1.0, 1.0)
+            local_data.ctrl .= clamp.(action, -1.0, 1.0)
 
-            step!(model, data)
-            total_reward += hop_reward(data)
+            step!(model, local_data)
+            total_reward += hop_reward(local_data)
             
             #= 
             # COM based reward 
@@ -116,8 +125,11 @@ for episode in 1:num_episodes
             episode_best_reward = total_reward
         end
         
-        push!(rewards, total_reward)
+        rewards[traj] = total_reward 
     end
+
+    episode_best_idx = argmax(rewards)
+    episode_best_reward = rewards[episode_best_idx]
     
     normalized_rewards = (rewards .- mean(rewards)) ./ (std(rewards) + 1e-8)
     push!(ep_rewards, mean(rewards))
