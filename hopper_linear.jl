@@ -3,7 +3,6 @@ using UnicodePlots
 using Statistics
 using LinearAlgebra
 using Threads 
-Threads.set_num_threads(4)
 
 model = load_model("hopper.xml")
 data = init_data(model)
@@ -115,21 +114,17 @@ for episode in 1:num_episodes
             =# 
         end
         
-        if total_reward > best_reward
-            best_reward = total_reward
-            best_policy = copy(policy)
-            println("New best policy found! Reward: $best_reward")
-        end
-        
-        if total_reward > episode_best_reward
-            episode_best_reward = total_reward
-        end
-        
         rewards[traj] = total_reward 
     end
 
     episode_best_idx = argmax(rewards)
     episode_best_reward = rewards[episode_best_idx]
+
+    if episode_best_reward > best_reward 
+        best_reward = episode_best_reward 
+        best_policy = copy(policies[episode_best_idx])
+        println("new best policy found! reward = $best_reward")
+    end 
     
     normalized_rewards = (rewards .- mean(rewards)) ./ (std(rewards) + 1e-8)
     push!(ep_rewards, mean(rewards))
