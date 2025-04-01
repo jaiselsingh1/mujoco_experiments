@@ -11,7 +11,7 @@ data = init_data(model)
 mj_resetData(model, data)
 init_qpos = copy(data.qpos) # to use within the loop to reset the data
 init_qvel = copy(data.qvel)
-num_observations = 2*model.nq
+num_observations = 2*model.nq + 1 # for the bias term 
 num_actions = model.nu
 noise_scale = 0.1
 learning_rate = 0.2
@@ -65,8 +65,8 @@ function hop_reward(data)
     t_height = 0 
     height = data.qpos[2]
     if height > t_height
-        #reward += upright_bonus
-        reward += 2*abs(height)
+        reward += upright_bonus
+        #reward += 2*abs(height)
     else 
         reward -= abs(height-t_height)
     end 
@@ -96,13 +96,14 @@ for episode in 1:num_episodes
         total_reward = 0.0
         
         for step in 1:max_steps
-            observation = vcat(local_data.qpos, local_data.qvel)
+            raw_observation = vcat(local_data.qpos, local_data.qvel)
+            observation = vcat(raw_observation, 1.0)
             
             # clip the velocity 
-            local_data.qvel .= clamp.(local_data.qvel, min_vel, max_vel)
+            # local_data.qvel .= clamp.(local_data.qvel, min_vel, max_vel)
             
             observation[3] = sin(observation[3])
-            action = policy * observation  #.+ 1.0 #the W*s + b 
+            action = policy * observation 
             local_data.ctrl .= clamp.(action, -1.0, 1.0)
 
             step!(model, local_data)
@@ -124,6 +125,12 @@ for episode in 1:num_episodes
             =# 
         end
         
+        #=
+        if episode % 250 == 0
+            display(histogram(local_data.qpos))
+            display(histogram(local_data.qvel))
+        end 
+        =#
         rewards[traj] = total_reward 
     end
 
@@ -159,7 +166,8 @@ end
 function trained_policy_controller!(m::Model, d::Data)
     state = vcat(d.qpos, d.qvel)
     state[3] = sin(state[3])
-    d.ctrl .= clamp.(best_policy * state, -1.0, 1.0)
+    augmented_state = vcat(state, 1.0)
+    d.ctrl .= clamp.(best_policy * augmented_state, -1.0, 1.0)
     nothing
 end
 
