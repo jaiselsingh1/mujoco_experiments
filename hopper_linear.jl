@@ -11,13 +11,18 @@ data = init_data(model)
 mj_resetData(model, data)
 init_qpos = copy(data.qpos) # to use within the loop to reset the data
 init_qvel = copy(data.qvel)
-num_observations = 2*model.nq #+ 1 # for the bias term 
+num_observations = 2*model.nq 
 num_actions = model.nu
 noise_scale = 0.1
 learning_rate = 0.3
+
 base_policy = 0.0 * randn(num_actions, num_observations)
-global best_policy = copy(base_policy)
+base_bias = zeros(num_actions)
+
 global best_reward = -Inf
+global best_policy = copy(base_policy)
+global best_bias = copy(base_bias)
+
 num_trajectories = 2*length(base_policy)
 num_episodes = 2000
 max_steps = 500
@@ -70,14 +75,17 @@ function hop_reward(data)
     else 
         reward -= abs(height-t_height)
     end 
-    
+
     return reward 
 end 
 
 for episode in 1:num_episodes
-    global best_policy, best_reward
+    global best_policy, best_reward, best_bias 
+    
     policies = Vector{typeof(base_policy)}(undef, num_trajectories) # pre allocates the memory (vector is just a 1d Array)
+    biases = Vector{typeof(base_bias)}(undef, num_trajectories)
     rewards = zeros(Float64, num_trajectories)
+
     episode_best_reward = -Inf
 
     thread_datas = [init_data(model) for _ in 1:Threads.nthreads()]
@@ -91,9 +99,10 @@ for episode in 1:num_episodes
         local_data.qvel .= copy(init_qvel)
         perturb_state!(local_data, init_qpos, init_qvel, 0.1)
 
-        bias = rand()
-        policy = base_policy .+ randn(size(base_policy)).*noise_scale .+ bias
+        bias = base_bias .+ rand(size(base_bias)).*noise_scale
+        policy = base_policy .+ randn(size(base_policy)).*noise_scale
         policies[traj] = policy 
+        biases[traj] = bias 
         total_reward = 0.0
         
         for step in 1:max_steps
@@ -102,9 +111,9 @@ for episode in 1:num_episodes
             
             # clip the velocity 
             local_data.qvel .= clamp.(local_data.qvel, min_vel, max_vel)
-            
             observation[3] = sin(observation[3])
-            action = policy * observation 
+
+            action = policy * observation + bias 
             local_data.ctrl .= clamp.(action, -1.0, 1.0)
 
             step!(model, local_data)
@@ -141,6 +150,7 @@ for episode in 1:num_episodes
     if episode_best_reward > best_reward 
         best_reward = episode_best_reward 
         best_policy = copy(policies[episode_best_idx])
+        best_bias = copy(biases[episode_best_idx])
         println("new best policy found! reward = $best_reward")
     end 
     
@@ -152,12 +162,19 @@ for episode in 1:num_episodes
         noise = policies[i] - base_policy
         gradient .+= noise .* normalized_rewards[i]
     end
+
+    bias_gradient = zeros(size(base_bias))
+    for i in 1:num_trajectories
+        noise = biases[i] - base_bias
+        bias_gradient .+= noise .* normalized_rewards[i]
+    end 
     
     display(heatmap(base_policy))
     display(gradient)
     display(lineplot(ep_rewards))
     
     base_policy .+= learning_rate * gradient/num_trajectories
+    base_bias .+= learning_rate * bias_gradient/num_trajectories
     
     if episode % 5 == 0 || episode == 1
         println("Episode $episode | Avg Reward: $(mean(rewards)) | Best Episode: $episode_best_reward | All-time Best: $best_reward")
@@ -168,7 +185,7 @@ function trained_policy_controller!(m::Model, d::Data)
     state = vcat(d.qpos, d.qvel)
     state[3] = sin(state[3])
     # augmented_state = vcat(state, 1.0)
-    d.ctrl .= clamp.(best_policy * state, -1.0, 1.0)
+    d.ctrl .= clamp.(best_policy * state + best_bias, -1.0, 1.0)
     nothing
 end
 
