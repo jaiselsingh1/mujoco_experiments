@@ -23,6 +23,9 @@ num_episodes = 2000
 max_steps = 500
 ep_rewards = Float64[]
 
+# clip the max/min velocities 
+min_vel = -4.0 
+max_vel = 4.0 
 
 function perturb_state!(data, init_qpos, init_qvel, pertubation_scale = 0.1)
     data.qpos .= copy(init_qpos)
@@ -88,15 +91,18 @@ for episode in 1:num_episodes
         local_data.qvel .= copy(init_qvel)
         perturb_state!(local_data, init_qpos, init_qvel, 0.1)
 
-
         policy = base_policy .+ randn(size(base_policy)).*noise_scale
         policies[traj] = policy 
         total_reward = 0.0
         
         for step in 1:max_steps
             observation = vcat(local_data.qpos, local_data.qvel)
+            
+            # clip the velocity 
+            local_data.qvel .= clamp.(local_data.qvel, min_vel, max_vel)
+            
             observation[3] = sin(observation[3])
-            action = policy * observation
+            action = policy * observation  #.+ 1.0 #the W*s + b 
             local_data.ctrl .= clamp.(action, -1.0, 1.0)
 
             step!(model, local_data)
