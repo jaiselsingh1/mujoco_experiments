@@ -19,7 +19,7 @@ base_policy = 0.0 * randn(num_actions, num_observations)
 global best_policy = copy(base_policy)
 global best_reward = -Inf
 num_trajectories = 2*length(base_policy)
-num_episodes = 1500
+num_episodes = 2000
 max_steps = 500
 ep_rewards = Float64[]
 
@@ -52,18 +52,22 @@ end
 function hop_reward(data)
     reward = 0.0
     
-    #= 
-    upright_bonus = 1.0 
-    height = data.qpos[2]
-    t_height = 0 
+    reward += 4*data.qvel[1]   # forward velocity reward 
 
-    if height > t_height 
-        reward += upright_bonus
+    if data.qvel[2] > 0  # encourage hopping 
+        reward += 0.2 * data.qvel[2]
+    end 
+
+    upright_bonus = 1.0 
+    t_height = 0 
+    height = data.qpos[2]
+    if height > t_height
+        #reward += upright_bonus
+        reward += 2*abs(height)
     else 
         reward -= abs(height-t_height)
     end 
-    =#
-    reward += data.qvel[1]    
+    
     return reward 
 end 
 
@@ -148,6 +152,7 @@ end
 
 function trained_policy_controller!(m::Model, d::Data)
     state = vcat(d.qpos, d.qvel)
+    state[3] = sin(state[3])
     d.ctrl .= clamp.(best_policy * state, -1.0, 1.0)
     nothing
 end
