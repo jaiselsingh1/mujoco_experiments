@@ -2,7 +2,7 @@ using MuJoCo
 using UnicodePlots
 using Statistics
 using LinearAlgebra
-using Threads 
+using .Threads 
 
 model = load_model("hopper.xml")
 data = init_data(model)
@@ -78,7 +78,7 @@ for episode in 1:num_episodes
     Threads.@threads for traj in 1:num_trajectories
 
         t_id = Threads.threadid()
-        local_data = thread.datas[t_id]
+        local_data = thread_datas[t_id]
 
         local_data.qpos .= copy(init_qpos)
         local_data.qvel .= copy(init_qvel)
