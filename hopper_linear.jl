@@ -11,10 +11,10 @@ data = init_data(model)
 mj_resetData(model, data)
 init_qpos = copy(data.qpos) # to use within the loop to reset the data
 init_qvel = copy(data.qvel)
-num_observations = 2*model.nq + 1 # for the bias term 
+num_observations = 2*model.nq #+ 1 # for the bias term 
 num_actions = model.nu
 noise_scale = 0.1
-learning_rate = 0.2
+learning_rate = 0.3
 base_policy = 0.0 * randn(num_actions, num_observations)
 global best_policy = copy(base_policy)
 global best_reward = -Inf
@@ -23,7 +23,7 @@ num_episodes = 2000
 max_steps = 500
 ep_rewards = Float64[]
 
-# clip the max/min velocities 
+# clip the max/min velocities (-4.0 and 4.0 based on emperical testing)
 min_vel = -4.0 
 max_vel = 4.0 
 
@@ -55,14 +55,14 @@ end
 function hop_reward(data)
     reward = 0.0
     
-    reward += 4*data.qvel[1]   # forward velocity reward 
+    reward += 4*data.qvel[1]  # forward velocity reward 
 
     if data.qvel[2] > 0  # encourage hopping 
         reward += 0.2 * data.qvel[2]
     end 
 
     upright_bonus = 1.0 
-    t_height = 0 
+    t_height = 0.0
     height = data.qpos[2]
     if height > t_height
         reward += upright_bonus
@@ -91,16 +91,17 @@ for episode in 1:num_episodes
         local_data.qvel .= copy(init_qvel)
         perturb_state!(local_data, init_qpos, init_qvel, 0.1)
 
-        policy = base_policy .+ randn(size(base_policy)).*noise_scale
+        bias = rand()
+        policy = base_policy .+ randn(size(base_policy)).*noise_scale .+ bias
         policies[traj] = policy 
         total_reward = 0.0
         
         for step in 1:max_steps
-            raw_observation = vcat(local_data.qpos, local_data.qvel)
-            observation = vcat(raw_observation, 1.0)
+            observation = vcat(local_data.qpos, local_data.qvel)
+            # observation = vcat(raw_observation, 1.0)
             
             # clip the velocity 
-            # local_data.qvel .= clamp.(local_data.qvel, min_vel, max_vel)
+            local_data.qvel .= clamp.(local_data.qvel, min_vel, max_vel)
             
             observation[3] = sin(observation[3])
             action = policy * observation 
@@ -166,8 +167,8 @@ end
 function trained_policy_controller!(m::Model, d::Data)
     state = vcat(d.qpos, d.qvel)
     state[3] = sin(state[3])
-    augmented_state = vcat(state, 1.0)
-    d.ctrl .= clamp.(best_policy * augmented_state, -1.0, 1.0)
+    # augmented_state = vcat(state, 1.0)
+    d.ctrl .= clamp.(best_policy * state, -1.0, 1.0)
     nothing
 end
 
