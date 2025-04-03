@@ -42,6 +42,7 @@ end
 
 function stand_reward(data)
     reward = 0.0 
+    
     upright_bonus = 1.0 
     height = data.qpos[2]
     t_height = 0.0 
@@ -51,7 +52,7 @@ function stand_reward(data)
     else
         reward -= abs(t_height-height)
     end
-    reward -= 1e-3 * norm(data.ctrl)^2
+    # reward -= 1e-3 * norm(data.ctrl)^2  # standing tends to get substantially better when the control cost is taken away 
 
     return reward 
 end 
@@ -59,7 +60,15 @@ end
 function hop_reward(data)
     reward = 0.0
     
-    reward += 4*data.qvel[1]  # forward velocity reward 
+    fwd_velocity = data.qvel[1]
+    height = data.qpos[2]
+    t_height = 0.0 
+
+    reward += 5*fwd_velocity - (abs(height-t_height))^2 #- 0.1*(norm(data.ctrl))^2
+    return reward 
+
+    #=
+    reward += sign(data.qvel[1]) * data.qvel[1]  # forward velocity reward 
 
     if data.qvel[2] > 0  # encourage hopping 
         reward += 0.2 * data.qvel[2]
@@ -76,10 +85,11 @@ function hop_reward(data)
     end 
 
     return reward 
+    =#
 end 
 
 for episode in 1:num_episodes
-    global best_policy, best_reward, best_bias 
+    global best_policy, best_reward
     
     policies = Vector{typeof(base_policy)}(undef, num_trajectories) # pre allocates the memory (vector is just a 1d Array)
     # biases = Vector{typeof(base_bias)}(undef, num_trajectories)
@@ -99,17 +109,17 @@ for episode in 1:num_episodes
         perturb_state!(local_data, init_qpos, init_qvel, 0.1)
 
         # bias = base_bias .+ rand(size(base_bias)).*noise_scale
-        policy = base_policy .+ randn(size(base_policy)).*noise_scale 
+        policy = base_policy .+ randn(size(base_policy)) .* noise_scale 
         policies[traj] = policy 
         total_reward = 0.0
         
         for step in 1:max_steps
             observation = vcat(local_data.qpos, local_data.qvel)
+            observation[3] = sin(observation[3]) # trying to make the non-linearities more easily understood 
             observation = vcat(observation, 1.0)
             
             # clip the velocity 
             local_data.qvel .= clamp.(local_data.qvel, min_vel, max_vel)
-            # observation[3] = sin(observation[3])
 
             action = policy * observation
             local_data.ctrl .= clamp.(action, -1.0, 1.0)
