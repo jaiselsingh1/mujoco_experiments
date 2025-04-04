@@ -4,9 +4,9 @@ using LinearAlgebra
 using UnicodePlots 
 using .Threads 
 
+# Load model first
 model = load_model("hopper.xml")
 data = init_data(model)
-
 
 function stand_reward(data)
     reward = 0.0 
@@ -25,6 +25,71 @@ function stand_reward(data)
     return reward 
 end 
 
+
+sim_datas = [init_data(model) for _ in 1:Threads.nthreads()]
+thread_rewards = fill(-Inf, Threads.nthreads())
+thread_indices = fill(0, Threads.nthreads())  # Use fill instead of Vector{Int}(undef, ...)
+
+function mpc_controller!(model, data)
+    H = 100 # horizon 
+    N = 100 # number of candidates 
+    actions = Vector{Matrix{Float64}}(undef, N)
+
+    # Reset thread-local results
+    fill!(thread_rewards, -Inf)
+    fill!(thread_indices, 0)
+
+    Threads.@threads for i in 1:N
+        actions[i] = clamp.(randn(model.nu, H), -1.0, 1.0)
+    end 
+
+    Threads.@threads for i in 1:N # number of candidates 
+        t_id = Threads.threadid()
+        sim_data = sim_datas[t_id]
+        action = actions[i]
+
+        sim_data.qpos .= data.qpos 
+        sim_data.qvel .= data.qvel
+
+        rewards = 0.0 
+
+        for t in 1:H  
+            sim_data.ctrl .= action[:, t]  # Use the action for current timestep
+            step!(model, sim_data)
+            rewards += stand_reward(sim_data)
+        end 
+
+        if rewards > thread_rewards[t_id]
+            thread_rewards[t_id] = rewards 
+            thread_indices[t_id] = i
+        end 
+    end 
+
+    best_reward = -Inf 
+    best_idx = 0 
+
+    for i in 1:Threads.nthreads()
+        if thread_rewards[i] > best_reward
+            best_reward = thread_rewards[i]
+            best_idx = thread_indices[i]
+        end 
+    end 
+
+    if best_idx > 0 
+        data.ctrl .= actions[best_idx][:, 1]
+    else 
+        data.ctrl .= zeros(model.nu)
+    end 
+
+    nothing 
+end 
+
+# Reset data before visualization
+mj_resetData(model, data)
+init_visualiser()
+visualise!(model, data, controller = mpc_controller!)
+
+#=
 function mpc_controller!(model, data)
     state = vcat(data.qpos, data.qvel)
     
@@ -79,8 +144,5 @@ function mpc_controller!(model, data)
     
     nothing
 end
+=#
 
-
-mj_resetData(model, data)
-init_visualiser()
-visualise!(model, data, controller = mpc_controller!)
