@@ -35,7 +35,6 @@ function mpc_controller!(model, data)
     N = 100 # number of candidates 
     actions = Vector{Matrix{Float64}}(undef, N)
 
-    # Reset thread-local results
     fill!(thread_rewards, -Inf)
     fill!(thread_indices, 0)
 
@@ -68,6 +67,7 @@ function mpc_controller!(model, data)
     best_reward = -Inf 
     best_idx = 0 
 
+    # check for the global best 
     for i in 1:Threads.nthreads()
         if thread_rewards[i] > best_reward
             best_reward = thread_rewards[i]

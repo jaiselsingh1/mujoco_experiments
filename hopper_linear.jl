@@ -13,8 +13,8 @@ init_qpos = copy(data.qpos) # to use within the loop to reset the data
 init_qvel = copy(data.qvel)
 num_observations = 2*model.nq 
 num_actions = model.nu
-noise_scale = 0.1
-learning_rate = 0.3
+noise_scale = 0.3
+learning_rate = 0.5
 
 base_policy = 0.0 * randn(num_actions, num_observations + 1) # the +1 symbolizes having an added bias term 
 
@@ -24,7 +24,7 @@ global best_policy = copy(base_policy)
 
 num_trajectories = 2*length(base_policy)
 num_episodes = 2000
-max_steps = 500
+max_steps = 1000
 ep_rewards = Float64[]
 
 # clip the max/min velocities (-4.0 and 4.0 based on emperical testing)
@@ -45,7 +45,7 @@ function stand_reward(data)
     
     upright_bonus = 1.0 
     height = data.qpos[2]
-    t_height = 0.0 
+    t_height = 1.0 
     if height > t_height
         reward += upright_bonus
         reward += abs(data.qvel[1]-2)  #data.qvel[1]*4
@@ -60,13 +60,30 @@ end
 function hop_reward(data)
     reward = 0.0
     
+    # Forward velocity reward 
     fwd_velocity = data.qvel[1]
+    reward += 2*(fwd_velocity)*abs(fwd_velocity)  # Reduce from 10 to ensure balanced learning
+    if fwd_velocity < 0.3 
+        reward -= 5.0 
+    end 
+    
+    # Hopping reward - encourage periodic up and down motion
+    vertical_velocity = data.qvel[2]
+    reward += 1.0 * abs(vertical_velocity)  # Reward any vertical movement
+
+    
+    # Height reward - maintain minimum height but allow hopping
+    upright_bonus = 1.0 
+    t_height = 0.0
     height = data.qpos[2]
-    t_height = 0.0 
+    if height > t_height
+        reward += upright_bonus
+        #reward += 2*abs(height)
+    else 
+        reward -= abs(height-t_height)
+    end 
 
-    reward += 5*fwd_velocity - (abs(height-t_height))^2 #- 0.1*(norm(data.ctrl))^2
     return reward 
-
     #=
     reward += sign(data.qvel[1]) * data.qvel[1]  # forward velocity reward 
 
@@ -125,7 +142,7 @@ for episode in 1:num_episodes
             local_data.ctrl .= clamp.(action, -1.0, 1.0)
 
             step!(model, local_data)
-            total_reward += stand_reward(local_data)
+            total_reward += hop_reward(local_data)
             
             #= 
             # COM based reward 
