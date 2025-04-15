@@ -3,6 +3,9 @@ using UnicodePlots
 using Statistics
 using LinearAlgebra
 using .Threads 
+using Optim 
+
+
 
 model = load_model("hopper.xml")
 data = init_data(model)
@@ -13,18 +16,18 @@ init_qpos = copy(data.qpos) # to use within the loop to reset the data
 init_qvel = copy(data.qvel)
 num_observations = 2*model.nq 
 num_actions = model.nu
-noise_scale = 0.3
-learning_rate = 0.5
+noise_scale = 0.1
+learning_rate = 0.3
 
 base_policy = 0.0 * randn(num_actions, num_observations + 1) # the +1 symbolizes having an added bias term 
 
 global best_reward = -Inf
-global best_policy = copy(base_policy)
+ # global best_policy = copy(base_policy)
  # global best_bias = copy(base_bias)
 
 num_trajectories = 2*length(base_policy)
 num_episodes = 2000
-max_steps = 1000
+max_steps = 500
 ep_rewards = Float64[]
 
 # clip the max/min velocities (-4.0 and 4.0 based on emperical testing)
@@ -48,7 +51,7 @@ function stand_reward(data)
     t_height = 1.0 
     if height > t_height
         reward += upright_bonus
-        reward += abs(data.qvel[1]-2)  #data.qvel[1]*4
+        reward += data.qvel[1] #data.qvel[1]*4
     else
         reward -= abs(t_height-height)
     end
@@ -60,19 +63,9 @@ end
 function hop_reward(data)
     reward = 0.0
     
-    # Forward velocity reward 
     fwd_velocity = data.qvel[1]
-    reward += 2*(fwd_velocity)*abs(fwd_velocity)  # Reduce from 10 to ensure balanced learning
-    if fwd_velocity < 0.3 
-        reward -= 5.0 
-    end 
+    reward += fwd_velocity
     
-    # Hopping reward - encourage periodic up and down motion
-    vertical_velocity = data.qvel[2]
-    reward += 1.0 * abs(vertical_velocity)  # Reward any vertical movement
-
-    
-    # Height reward - maintain minimum height but allow hopping
     upright_bonus = 1.0 
     t_height = 0.0
     height = data.qpos[2]
@@ -84,40 +77,19 @@ function hop_reward(data)
     end 
 
     return reward 
-    #=
-    reward += sign(data.qvel[1]) * data.qvel[1]  # forward velocity reward 
 
-    if data.qvel[2] > 0  # encourage hopping 
-        reward += 0.2 * data.qvel[2]
-    end 
-
-    upright_bonus = 1.0 
-    t_height = 0.0
-    height = data.qpos[2]
-    if height > t_height
-        reward += upright_bonus
-        #reward += 2*abs(height)
-    else 
-        reward -= abs(height-t_height)
-    end 
-
-    return reward 
-    =#
 end 
 
-for episode in 1:num_episodes
-    global best_policy, best_reward
-    
-    policies = Vector{typeof(base_policy)}(undef, num_trajectories) # pre allocates the memory (vector is just a 1d Array)
-    # biases = Vector{typeof(base_bias)}(undef, num_trajectories)
-    rewards = zeros(Float64, num_trajectories)
+thread_datas = [init_data(model) for _ in 1:Threads.nthreads()]
+policies = Vector{typeof(base_policy)}(undef, num_trajectories) # pre allocates the memory (vector is just a 1d Array)
+rewards = zeros(Float64, num_trajectories)
 
+for episode in 1:num_episodes
+    global best_reward
     episode_best_reward = -Inf
 
-    thread_datas = [init_data(model) for _ in 1:Threads.nthreads()]
 
     Threads.@threads for traj in 1:num_trajectories
-
         t_id = Threads.threadid()
         local_data = thread_datas[t_id]
 
@@ -135,14 +107,14 @@ for episode in 1:num_episodes
             observation[3] = sin(observation[3]) # trying to make the non-linearities more easily understood 
             observation = vcat(observation, 1.0)
             
-            # clip the velocity 
-            local_data.qvel .= clamp.(local_data.qvel, min_vel, max_vel)
+            # clip the velocity (got rid of this because you should let the dynamics actually roll out)
+            # local_data.qvel .= clamp.(local_data.qvel, min_vel, max_vel)
 
             action = policy * observation
             local_data.ctrl .= clamp.(action, -1.0, 1.0)
 
             step!(model, local_data)
-            total_reward += hop_reward(local_data)
+            total_reward += stand_reward(local_data)
             
             #= 
             # COM based reward 
@@ -168,7 +140,7 @@ for episode in 1:num_episodes
 
     if episode_best_reward > best_reward 
         best_reward = episode_best_reward 
-        best_policy = copy(policies[episode_best_idx])
+        # best_policy = copy(policies[episode_best_idx])
         # best_bias = copy(biases[episode_best_idx])
         println("new best policy found! reward = $best_reward")
     end 
@@ -195,9 +167,14 @@ for episode in 1:num_episodes
     display(gradient)
     display(lineplot(ep_rewards))
     
-    base_policy .+= learning_rate * gradient/num_trajectories
+    base_policy .+= learning_rate * gradient # /num_trajectories
     # base_bias .+= learning_rate * bias_gradient/num_trajectories
     
+    if episode % 100 == 0 
+        println("base_policy $base_policy and learning rate = $learning_rate and gradeint = $gradient")
+    end 
+
+
     if episode % 5 == 0 || episode == 1
         println("Episode $episode | Avg Reward: $(mean(rewards)) | Best Episode: $episode_best_reward | All-time Best: $best_reward")
     end
@@ -208,7 +185,7 @@ function trained_policy_controller!(m::Model, d::Data)
     state[3] = sin(state[3])
     state = vcat(state, 1.0)
     # augmented_state = vcat(state, 1.0)
-    d.ctrl .= clamp.(best_policy * state, -1.0, 1.0)
+    d.ctrl .= clamp.(base_policy * state, -1.0, 1.0)
     nothing
 end
 
