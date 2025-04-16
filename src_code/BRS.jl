@@ -75,15 +75,16 @@ function BRS(model, data; α=0.01, ν=0.03, N=100, H=1000, num_episodes=100) # b
         π_minus = [policy - deltas[i] for i = 1:N]
 
         #storing the 2 rewards 
-        R_plus = Float64[]
-        R_minus = Float64[]
+        R_plus = Vector{Float64}(undef, N)
+        R_minus = Vector{Float64}(undef, N)
+        thread_datas = [init_data(model) for _ in 1:Threads.nthreads()]
 
         Threads.@threads for k = 1:N  # can make this part multi-threaded 
-            local_data1 = init_data(model)
-            local_data2 = init_data(model)
+            t_id = Threads.threadid()
+            local_data = thread_datas[t_id]
 
-            push!(R_plus, rollout(model, local_data1, π_plus[k]))
-            push!(R_minus, rollout(model, local_data2, π_minus[k]))
+            R_plus[k] = rollout(model, local_data, π_plus[k])
+            R_minus[k] = rollout(model, local_data, π_minus[k])
         end 
 
         # update 
