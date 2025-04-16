@@ -20,6 +20,25 @@ function get_state(data)
     return vcat(copy(data.qpos), copy(data.qvel))
 end 
 
+function hop_reward(data)
+    reward = 0.0
+    
+    fwd_velocity = data.qvel[1]
+    reward += fwd_velocity
+    
+    upright_bonus = 1.0 
+    t_height = 0.0
+    height = data.qpos[2]
+    if height > t_height
+        reward += upright_bonus
+        #reward += 2*abs(height)
+    else 
+        reward -= abs(height-t_height)
+    end 
+
+    return reward 
+end 
+
 
 function stand_reward(data)
     reward = 0.0 
