@@ -39,20 +39,20 @@ end
 function rollout(model, data, policy; H=1000)  
     data.qpos .= init_qpos 
     data.qvel .= init_qvel 
-
+    
+    total_reward = 0.0 
     for h = 1:H 
-        total_reward = 0.0 
+        
         observation = get_state(data) # can be tweaked later on to be something else 
         action = policy * observation 
         
         data.ctrl .= action 
 
         step!(model, data)
-
         total_reward += stand_reward(data)
     end 
-    return total_reward 
-
+    
+    return total_reward
 end     
 
 
@@ -66,11 +66,11 @@ function BRS(model, data; α=0.01, ν=0.03, N=10, H=1000, num_episodes=100) # ba
     ep_rewards = Float64[] # to help track the learning 
 
     for episode = 1:num_episodes
-        deltas = [(ν * randn(size(policy)) for _ = 1:N)]
+        deltas = [ν * randn(size(policy)) for _ = 1:N]
         
         # the two policies
-        π_plus = [policy + delta for delta in deltas]
-        π_minus = [policy - delta for delta in deltas]
+        π_plus = [policy + deltas[i] for i = 1:N ]
+        π_minus = [policy - deltas[i] for i = 1:N]
 
         #storing the 2 rewards 
         R_plus = Float64[]
@@ -92,7 +92,7 @@ function BRS(model, data; α=0.01, ν=0.03, N=10, H=1000, num_episodes=100) # ba
         push!(ep_rewards, current_reward)
 
         if episode % 10 == 0
-            println("Iteration $iter, Reward: $current_reward")
+            println("Episode $episode, Reward: $current_reward")
         end
     end 
 
