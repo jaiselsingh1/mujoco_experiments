@@ -21,24 +21,13 @@ function get_state(data)
 end 
 
 function hop_reward(data)
-    reward = 0.0
-    
+    reward = 0.0 
+
     fwd_velocity = data.qvel[1]
-    reward += fwd_velocity
-    
-    upright_bonus = 1.0 
-    t_height = 0.0
-    height = data.qpos[2]
-    if height > t_height
-        reward += upright_bonus
-        #reward += 2*abs(height)
-    else 
-        reward -= abs(height-t_height)
-    end 
+    reward += fwd_velocity 
 
     return reward 
 end 
-
 
 function stand_reward(data)
     reward = 0.0 
@@ -81,7 +70,7 @@ end
 # N is number of directions 
 # ν is std of the noise 
 # H is Horizon 
-function BRS(model, data; α=0.01, ν=0.03, N=100, H=1000, num_episodes=100) # basic random search 
+function BRS(model, data; α=0.01, ν=0.02, N=500, H=1000, num_episodes=100) # basic random search 
     policy = create_policy(model, data) # initialize policy 
 
     ep_rewards = Float64[] # to help track the learning 
@@ -112,7 +101,7 @@ function BRS(model, data; α=0.01, ν=0.03, N=100, H=1000, num_episodes=100) # b
             update .+= (R_plus[k] - R_minus[k]) .* deltas[k]
         end 
 
-        policy .+= (α/N) .* update 
+        policy .+= (α/N).*update 
         current_reward = rollout(model, data, policy, H=H)
         push!(ep_rewards, current_reward)
 
@@ -134,6 +123,58 @@ function BRS_controller!(model, data)
     data.ctrl .= clamp.(BRS_policy * observation, -1.0, 1.0)
     nothing 
 end 
+
+function ARS_V1(model, data; α=0.01, ν=0.02, N=500, H=1000, num_episodes=100) #scaling BRS by the standard deviation of the collected rewards 
+    policy = create_policy(model, data)
+    ep_rewards = Float64[]
+
+    for episode = 1:num_episodes 
+        deltas = [ν .* randn(size(policy)) for _ = 1:N]
+        
+        π_plus = [policy + deltas[k] for k = 1:N]
+        π_minus = [policy - deltas[k] for k = 1:N]
+
+        R_plus = Vector{Float64}(undef, N)
+        R_minus = Vector{Float64}(unfef, N)
+        max_R = Vector{Tuple{Float64, Float64, Float64, Vector{Float64}}}()
+
+        Threads.@threads for k = 1:N  
+            t_id = Threads.threadid()
+            local_data = thread_datas[t_id]
+
+            R_plus[k] = rollout(model, local_data, π_plus[k])
+            R_minus[k] = rollout(model, local_data, π_minus[k])
+            
+            max_reward = max(R_plus[k], R_minus[k])
+            max_R[k] = (max_reward, R_plus[k], R_minus[k], deltas[k]))
+        end 
+
+        sorted_rewards = sort(max_R, by=x ->x[1], rev=true)
+        
+
+
+        #= 
+        rewards_list = collect(zip(R_plus, R_minus, deltas))
+        sorted_tuples = sort(rewards_list, by=x -> (x[1], x[2], rev=true))  # the by x is an anon function 
+        =# 
+
+        
+        
+        
+
+
+    end 
+
+end 
+
+function ARS_V2() # "linear maps of states normalized by a mean and standard deviation computed online" 
+
+end 
+
+
+
+
+
 
 
 mj_resetData(model, data)
