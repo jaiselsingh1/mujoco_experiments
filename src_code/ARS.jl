@@ -116,7 +116,7 @@ function BRS(model, data; α=0.01, ν=0.02, N=500, H=1000, num_episodes=100) # b
     return policy
 end 
 
-BRS_policy = BRS(model, data)
+# BRS_policy = BRS(model, data)
 
 function BRS_controller!(model, data)
     observation = get_state(data)
@@ -135,8 +135,10 @@ function ARS_V1(model, data; α=0.01, ν=0.02, N=500, H=1000, num_episodes=100) 
         π_minus = [policy - deltas[k] for k = 1:N]
 
         R_plus = Vector{Float64}(undef, N)
-        R_minus = Vector{Float64}(unfef, N)
+        R_minus = Vector{Float64}(undef, N)
         max_R = Vector{Tuple{Float64, Float64, Float64, Vector{Float64}}}()
+
+        thread_datas = [init_data(model) for _ in 1:Threads.nthreads()]
 
         Threads.@threads for k = 1:N  
             t_id = Threads.threadid()
@@ -145,27 +147,52 @@ function ARS_V1(model, data; α=0.01, ν=0.02, N=500, H=1000, num_episodes=100) 
             R_plus[k] = rollout(model, local_data, π_plus[k])
             R_minus[k] = rollout(model, local_data, π_minus[k])
             
+            # elite selection in evolutionary strategies 
             max_reward = max(R_plus[k], R_minus[k])
-            max_R[k] = (max_reward, R_plus[k], R_minus[k], deltas[k]))
+            max_R[k] = (max_reward, R_plus[k], R_minus[k], deltas[k])
         end 
 
-        sorted_rewards = sort(max_R, by=x ->x[1], rev=true)
-        
+        sorted_rewards = sort(max_R, by=x->x[1], rev=true)
+        sorted_R_plus = [x[2] for x in max_R]
+        sorted_R_minus = [x[3] for x in max_R]
+        sorted_deltas = [x[4] for x in max_R]
 
+        σ = std(vcat(R_plus, R_minus)) # standard deviation of the rewards from the rollouts 
+
+        update = zeros(size(policy))
+        for k = 1:N
+            update .+= (sorted_R_plus[k] - sorted_R_minus[k]).*sorted_deltas[k]
+        end 
+
+        policy .+= (α/(N*σ)).*update  # b == N in our case 
 
         #= 
         rewards_list = collect(zip(R_plus, R_minus, deltas))
         sorted_tuples = sort(rewards_list, by=x -> (x[1], x[2], rev=true))  # the by x is an anon function 
         =# 
 
-        
-        
-        
+        current_reward = rollout(model, data, policy, H=H)
+        push!(ep_rewards, current_reward)
 
-
+        if episode % 10 == 0
+            println("Episode $episode, Reward: $current_reward")
+        end
     end 
 
+    display(heatmap(policy))
+    display(lineplot(ep_rewards))
+    
+    return policy
 end 
+
+ARS_policy = ARS_V1(model, data)
+
+function ARS_controller!(model, data)
+    observation = get_state(data)
+    data.ctrl .= clamp.(ARS_policy * observation, -1.0, 1.0)
+    nothing 
+end 
+
 
 function ARS_V2() # "linear maps of states normalized by a mean and standard deviation computed online" 
 
@@ -179,7 +206,7 @@ end
 
 mj_resetData(model, data)
 init_visualiser()
-visualise!(model, data, controller=BRS_controller!)
+visualise!(model, data, controller=ARS_controller!)
 
 
 
