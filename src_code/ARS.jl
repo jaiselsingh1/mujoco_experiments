@@ -202,11 +202,79 @@ function ARS_controller!(model, data)
     nothing
 end
 
+function rollout_v2(model, data, policy; H=1000)
+    data.qpos .= (init_qpos)
+    data.qvel .= (init_qvel)
 
-function ARS_V2() # "linear maps of states normalized by a mean and standard deviation computed online"
+    states = []
+    total_reward = 0.0
+    for t = 1:H
+        observation = get_state(data)
+        action = policy * observation
 
+        data.ctrl .= action
+        step!(model, data)
+
+        push!(states, get_state(data))
+        total_reward += stand_reward(data)
+    end
+    return total_reward, states
 end
 
+
+function ARS_V2(model, data, α=0.01, ν=0.02, N=500, H=1000, num_episodes=100) # "linear maps of states normalized by a mean and standard deviation computed online"
+    policy = create_policy(model, data)
+    ep_rewards = Float64[]
+
+    # initialize the mean and covariance matrices for being able to do the data-whitening
+    initial_state = get_state(data)
+    μ = zeros(length(initial_state))
+    Σ = Matrix{Float64}(I, length(initial_state), length(initial_state))
+
+    for episode = 1:num_episodes
+
+        function normalize_state(state)
+            return diag(Σ)^(-1 / 2) * (state - μ)
+        end
+
+        deltas = [ν .* randn(size(policy)) for _ = 1:N]
+
+        π_plus = [policy + deltas[k] for k = 1:N]
+        π_minus = [policy - deltas[k] for k = 1:N]
+
+        R_plus = Vector{Float64}(undef, N)
+        R_minus = Vector{Float64}(undef, N)
+        max_R = Vector{Float64}(undef, N)
+        all_states = []
+
+        thread_datas = [init_data(model) for _ in 1:Threads.nthreads()]
+
+        Threads.@threads for k = 1:N
+            t_id = Threads.threadid()
+            local_data = thread_datas[t_id]
+
+            function Π_plus(state)
+                normalized_state = normalize_state(state)
+                return π_plus[k] * normalized_state
+            end
+
+            function Π_minus(state)
+                normalized_state = normalize_state(state)
+                return π_minus[k] * normalized_state
+            end
+
+            R_plus[k], states_plus = rollout_v2(model, local_data, Π_plus)
+            R_minus[k], states_minus = rollout_v2(model, local_data, Π_minus)
+
+
+        end
+
+
+
+
+
+    end
+end
 
 
 
