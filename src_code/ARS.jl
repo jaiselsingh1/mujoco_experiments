@@ -50,17 +50,18 @@ end
 function rollout(model, data, policy; H=1000)
     data.qpos .= copy(init_qpos)
     data.qvel .= copy(init_qvel)
+    forward!(model, data)
 
     total_reward = 0.0
     for h = 1:H
 
+        total_reward += stand_reward(data)
         observation = get_state(data) # can be tweaked later on to be something else
         action = policy * observation
 
-        data.ctrl .= action
+        data.ctrl .= clamp.(action, -1.0, 1.0)
 
         step!(model, data)
-        total_reward += stand_reward(data)
     end
 
     return total_reward
@@ -205,6 +206,7 @@ end
 function rollout_v2(model, data, policy_function; H=1000)
     data.qpos .= (init_qpos)
     data.qvel .= (init_qvel)
+    forward!(model, data)
 
     states = []
     total_reward = 0.0
@@ -212,7 +214,7 @@ function rollout_v2(model, data, policy_function; H=1000)
         observation = get_state(data)
         action = policy_function(observation) * observation
 
-        data.ctrl .= action
+        data.ctrl .= clamp.(action, -1.0, 1.0)
         step!(model, data)
 
         push!(states, get_state(data))
@@ -267,8 +269,23 @@ function ARS_V2(model, data, α=0.01, ν=0.02, N=500, H=1000, num_episodes=100) 
             R_minus[k], states_minus = rollout_v2(model, local_data, Π_minus)
 
             max_R[k] = max(R_plus[k], R_minus[k])
-
         end
+
+        σ = std(vcat(R_plus, R_minus))
+
+        sorted_indices = sortperm(max_R, rev=true)
+        sorted_R_plus = R_plus[sorted_indices]
+        sorted_R_minus = R_minus[sorted_indices]
+        sorted_deltas = deltas[sorted_indices]
+
+        update = zeros(size(policy))
+        for k = 1:N
+            update .+= (sorted_R_plus[k] - sorted_R_minus[k]) .* sorted_deltas[k]
+        end
+
+        policy .+= (α / (σ * N)) .* update
+
+
     end
 end
 
