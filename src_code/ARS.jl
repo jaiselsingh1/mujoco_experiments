@@ -157,7 +157,7 @@ function ARS_V1(model, data; α=0.01, ν=0.02, N=500, H=1000, num_episodes=100) 
 
         σ = std(vcat(R_plus, R_minus)) # standard deviation of the rewards from the rollouts
 
-        sorted_indices = sortperm(max_R)
+        sorted_indices = sortperm(max_R, rev=true)
         sorted_R_plus = R_plus[sorted_indices]
         sorted_R_minus = R_minus[sorted_indices]
         sorted_deltas = deltas[sorted_indices]
@@ -266,13 +266,9 @@ function ARS_V2(model, data, α=0.01, ν=0.02, N=500, H=1000, num_episodes=100) 
             R_plus[k], states_plus = rollout_v2(model, local_data, Π_plus)
             R_minus[k], states_minus = rollout_v2(model, local_data, Π_minus)
 
+            max_R[k] = max(R_plus[k], R_minus[k])
 
         end
-
-
-
-
-
     end
 end
 
