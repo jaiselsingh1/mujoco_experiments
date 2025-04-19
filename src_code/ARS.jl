@@ -202,7 +202,7 @@ function ARS_controller!(model, data)
     nothing
 end
 
-function rollout_v2(model, data, policy; H=1000)
+function rollout_v2(model, data, policy_function; H=1000)
     data.qpos .= (init_qpos)
     data.qvel .= (init_qvel)
 
@@ -210,7 +210,7 @@ function rollout_v2(model, data, policy; H=1000)
     total_reward = 0.0
     for t = 1:H
         observation = get_state(data)
-        action = policy * observation
+        action = policy_function(observation) * observation
 
         data.ctrl .= action
         step!(model, data)
