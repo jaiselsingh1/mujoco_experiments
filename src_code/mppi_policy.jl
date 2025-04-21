@@ -2,6 +2,10 @@ using MuJoCo
 using .Threads
 using LinearAlgebra
 
+
+model = load_model("../models/cartpole.xml")
+data = init_data(model)
+
 function get_state(data)
     return vcat(copy(data.qpos), copy(data.qvel))
 end
@@ -14,7 +18,7 @@ end
 
 # K is the number of samples to generate (the number of control sequences)
 # T is the number of time steps
-function mppi_rollouts(model, data, K, T; Σ, Φ, λ, q)
+function mppi(model, data, K, T; Σ, Φ, λ, q)
     nu = model.nu # number of control inputs
     U = zeros(nu, T)
     S = zeros(K) # S is the costs
@@ -35,9 +39,23 @@ function mppi_rollouts(model, data, K, T; Σ, Φ, λ, q)
     end
 
     β = minimum(S)
-    η = sum(exp.((-1.0 / λ) .* (S .- β)))
-    ω = exp.((-1 / λ) .* (S .- β)) ./ η  # where omega is the weights
+    weights = exp.((-1.0 / λ) * (S .- β))
+    η = sum(weights)
+    weights ./= η
+
+    for t = 1:T
+        U[:, t] += sum(weights[k]ϵ[k][:, t] for k = 1:K)
+    end
+
+    for t = 2:T
+        U[:, t-1] .= U[:, t]
+    end
+
+    U[:, T] .= zeros(nu)  # this is to re-initialize the last control step
+    return U
+end
 
 
+function mppi_controller!(model, data)
 
 end
