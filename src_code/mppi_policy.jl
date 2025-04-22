@@ -36,40 +36,45 @@ function mppi(model, data; K=30, T=100, Σ=1.0, Φ=0.0, λ=1.0, q=0.0)
     nu = model.nu # number of control inputs
     U = zeros(nu, T)
     S = zeros(K) # S is the costs
-    ϵ = [rand(nu, T) for _ = 1:K] # generating noise for T time steps for each of the K samples
+    ϵ = [randn(nu, T) for _ = 1:K] # generating noise for T time steps for each of the K samples
     x_0 = get_state(data)
+
     for k = 1:K
         local_data = init_data(model)
         local_data.qpos .= data.qpos
         local_data.qvel .= data.qvel
         x = x_0
-        for t = 1:T
-            u_t = U[:, t] .+ ϵ[k][:, t]  # Generate noisy control for this timestep
-            local_data.ctrl .= u_t       # Apply only the current control
-            step!(model, local_data)
-            S[k] += running_cost(local_data, local_data.ctrl) + λ * dot(U[:, t], ϵ[k][:, t])
 
+        for t = 1:T
+            local_data.ctrl .= clamp.(U[:, t] .+ ϵ[k][:, t], -1.0, 1.0)  # Generate noisy control for this timestep
+            step!(model, local_data)
+            S[k] += running_cost(local_data, local_data.ctrl) + (λ * inv(Σ) * U[:, t]' * ϵ[k][:, t])
         end
+
         S[k] += terminal_cost(local_data, local_data.ctrl)
     end
+
     β = minimum(S)
     weights = exp.((-1.0 / λ) * (S .- β))
     η = sum(weights)
     weights ./= η
+
     for t = 1:T
         U[:, t] .+= sum(weights[k] * ϵ[k][:, t] for k = 1:K)
     end
-    # Shift controls forward
+
     for t = 2:T
         U[:, t-1] .= U[:, t]
     end
+
     U[:, T] .= zeros(nu)  # this is to re-initialize the last control step
+
     return U
 end
 
 
 function mppi_controller!(model, data)
-    data.ctrl .= mppi(model, data)[:, 1]
+    data.ctrl .= clamp.(mppi(model, data)[:, 1], -1.0, 1.0)
     nothing
 end
 
