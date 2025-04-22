@@ -3,14 +3,18 @@ using .Threads
 using LinearAlgebra
 
 
-model = load_model("../models/cartpole.xml")
-data = init_data(model)
+model_cp = load_model("../models/cartpole.xml")
+data_cp = init_data(model_cp)
+
+model_hp = load_model("../models/hopper.xml")
+data_hp = init_data(model_hp)
 
 function get_state(data)
     return vcat(copy(data.qpos), copy(data.qvel))
 end
 
-function running_cost(data, ctrl)
+# cartpole
+function running_cost_cp(data, ctrl)
     x = data.qpos[1]
     θ = data.qpos[2]
     x_dot = data.qvel[1]
@@ -26,13 +30,33 @@ function running_cost(data, ctrl)
     return cost
 end
 
-function terminal_cost(data, ctrl)
-    return 10.0 * running_cost(data, ctrl)
+function terminal_cost_cp(data, ctrl)
+    return 10.0 * running_cost_cp(data, ctrl)
+end
+
+# hopper
+function running_cost_hp(data, ctrl)
+    reward = 0.0
+    height = data.qpos[2]
+    upright_bonus = 1.0
+    t_height = 1.0
+    if height > t_height
+        reward += upright_bonus
+        reward += data.qvel[1] #data.qvel[1]*4
+    else
+        reward -= abs(t_height - height)
+    end
+
+    return -1.0 * reward
+end
+
+function terminal_cost_hp(data, ctrl)
+    return 5.0 * running_cost_hp(data, ctrl)
 end
 
 # K is the number of samples to generate (the number of control sequences)
 # T is the number of time steps
-function mppi(model, data; K=30, T=100, Σ=1.0, Φ=0.0, λ=1.0, q=0.0)
+function mppi(model, data; K=50, T=100, Σ=1.0, Φ=0.0, λ=0.5, q=0.0)
     nu = model.nu # number of control inputs
     U = zeros(nu, T)
     S = zeros(K) # S is the costs
@@ -48,10 +72,10 @@ function mppi(model, data; K=30, T=100, Σ=1.0, Φ=0.0, λ=1.0, q=0.0)
         for t = 1:T
             local_data.ctrl .= clamp.(U[:, t] .+ ϵ[k][:, t], -1.0, 1.0)  # Generate noisy control for this timestep
             step!(model, local_data)
-            S[k] += running_cost(local_data, local_data.ctrl) + (λ * inv(Σ) * U[:, t]' * ϵ[k][:, t])
+            S[k] += running_cost_cp(local_data, local_data.ctrl) + (λ * inv(Σ) * U[:, t]' * ϵ[k][:, t])
         end
 
-        S[k] += terminal_cost(local_data, local_data.ctrl)
+        S[k] += terminal_cost_cp(local_data, local_data.ctrl)
     end
 
     β = minimum(S)
@@ -78,6 +102,6 @@ function mppi_controller!(model, data)
     nothing
 end
 
-mj_resetData(model, data)
+mj_resetData(model_hp, data_hp)
 init_visualiser()
-visualise!(model, data; controller=mppi_controller!)
+visualise!(model_hp, data_hp; controller=mppi_controller!)
