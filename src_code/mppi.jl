@@ -56,15 +56,18 @@ end
 
 # K is the number of samples to generate (the number of control sequences)
 # T is the number of time steps
-function mppi(model, data; K=50, T=100, Σ=1.0, Φ=0.0, λ=0.5, q=0.0)
+# λ is the temperature parameter which is able to control exploration vs exploitation ratio
+function mppi(model, data; K=100, T=100, Σ=1.0, Φ=0.0, λ=0.5, q=0.0)
     nu = model.nu # number of control inputs
     U = zeros(nu, T)
     S = zeros(K) # S is the costs
     ϵ = [randn(nu, T) for _ = 1:K] # generating noise for T time steps for each of the K samples
     x_0 = get_state(data)
 
-    for k = 1:K
-        local_data = init_data(model)
+    local_datas = [init_data(model) for _ = 1:Threads.nthreads()]
+    Threads.@threads for k = 1:K
+        t_id = Threads.threadid()
+        local_data = local_datas[t_id]
         local_data.qpos .= data.qpos
         local_data.qvel .= data.qvel
         x = x_0
