@@ -1,12 +1,29 @@
+using MuJoCo: mjModel, mjData
 using MuJoCo
 using .Threads
 using LinearAlgebra
 
-model = load_model("../models/hopper.xml")
-data = init_data(model)
-
 function get_state(data)
     return vcat(copy(data.qpos), copy(data.qvel))
+end
+
+struct HopperModel
+    model::mjModel
+    data::mjData
+    num_actions::Int
+    num_obs::Int
+    num_features::Int
+end
+
+function hopper_model(model_path="../models/hopper.xml")
+    model = load_model(model_path)
+    data = init_data(model)
+
+    num_actions = model.nu
+    num_obs = length(get_state(data))
+    num_features = 10 * num_obs
+
+    return HopperModel(model, data, num_actions, num_obs, num_features)
 end
 
 function hop_reward(data)
@@ -18,15 +35,11 @@ function hop_reward(data)
     return reward
 end
 
-function RBF(model, data)
-    num_actions = model.nu
-    num_obs = length(get_state(data))
-    num_features = 10 * num_obs
-
+function RBF(env::HopperModel)
     # fixed parammeters
-    P = randn(num_features, num_obs)
+    P = randn(env.num_features, env.num_obs)
     # ν = sqrt(num_obs)
-    Φ = 2π .* randn(num_features) .- π
+    Φ = 2π .* randn(env.num_features) .- π
 
     # W_init = randn(num_actions, num_features)
     # b_init = zeros(num_actions)
@@ -39,13 +52,13 @@ function RBF(model, data)
     return RBF_policy
 end
 
-function collect_trajectories(model, data, policy; N, H, noise_scale=0.1) # N -> number of trajectories ; H -> number of time steps/steps per traj
+function collect_trajectories(env::HopperModel, policy; N, H, noise_scale=0.1) # N -> number of trajectories ; H -> number of time steps/steps per traj
     trajectories = Vector{Any}(undef, N) # states, actions, rewards
-    for n in 1:N
-        local_data = init_data(model)
 
-        W = noise_scale * randn(num_actions, num_features)
-        b = zeros(num_actions)
+    for n in 1:N
+        local_data = init_data(env.model)
+        W = noise_scale * randn(env.num_actions, env.num_features)
+        b = zeros(env.num_actions)
 
         states = Vector{Vector{Float64}}(undef, H)
         actions = Vector{Vector{Float64}}(undef, H)
@@ -58,7 +71,7 @@ function collect_trajectories(model, data, policy; N, H, noise_scale=0.1) # N ->
             actions[h] = policy(observation, W, b)
 
             local_data.ctrl .= actions[h]
-            step!(model, local_data)
+            step!(env.model, local_data)
 
             traj_reward = hop_reward(local_data)
             rewards[h] = traj_reward
@@ -70,9 +83,10 @@ function collect_trajectories(model, data, policy; N, H, noise_scale=0.1) # N ->
     return trajectories
 end
 
-function natural_gradient()
+function natural_gradient(env::HopperModel)
     for k in 1:K
 
-        states, actions, rewards = collect_trajectories(model, data, policy)
+        policy = RBF(env)
+        states, actions, rewards = collect_trajectories(env, policy)
     end
 end
