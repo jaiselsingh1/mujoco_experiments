@@ -9,47 +9,70 @@ function get_state(data)
     return vcat(copy(data.qpos), copy(data.qvel))
 end
 
-function RBF(model, data, num_actions, num_obs, num_features, observation; noise_scale=0.1)
-    y = zeros(num_features)
-    P = randn(num_features, num_obs)
-    ν = sqrt(num_obs)
-    Φ = 2π .* randn(num_features) .- π
+function hop_reward(data)
+    reward = 0.0
 
-    y .= sin.((P * observation) / ν .+ Φ)
+    fwd_velocity = data.qvel[1]
+    reward += fwd_velocity
 
-    return y # y is the features that need to be applied in order to actually get an action and policy
-
+    return reward
 end
 
-function rollouts(model, data, policy; N, max_steps)
-    trajectories = Vector{Tuple{Vector{Vector{Float64}},Vector{Vector{Float64}},Vector{Float64},Float64}}(undef, N)  # rewards, states, actions
-
-    for n in 1:N
-
-    end
-end
-
-function natural_gradient(model, data; K)
+function RBF(model, data)
     num_actions = model.nu
-    observation = get_state(data)
-    num_obs = length(observation)
+    num_obs = length(get_state(data))
     num_features = 10 * num_obs
 
-    for k = 1:K  # K is the number of iterations that the gradient will perform
-        y = RBF(model, data, num_actions, num_obs, num_features, observation)
-        W = randn(num_obs, num_features)
-        b = randn(num_obs)
+    # fixed parammeters
+    P = randn(num_features, num_obs)
+    # ν = sqrt(num_obs)
+    Φ = 2π .* randn(num_features) .- π
 
+    # W_init = randn(num_actions, num_features)
+    # b_init = zeros(num_actions)
+
+    function RBF_policy(observation, W, b)
+        y = sin.(P * observation + Φ)
         policy = W * y + b
+        return policy
+    end
+    return RBF_policy
+end
 
-        # collect N trajectories
-        # compute the log for the state, action pair
-        # compute advantages based on the trajectories; approximate the value function
-        # policy gradient
+function collect_trajectories(model, data, policy; N, H, noise_scale=0.1) # N -> number of trajectories ; H -> number of time steps/steps per traj
+    trajectories = Vector{Any}(undef, N) # states, actions, rewards
+    for n in 1:N
+        local_data = init_data(model)
 
+        W = noise_scale * randn(num_actions, num_features)
+        b = zeros(num_actions)
 
+        states = Vector{Vector{Float64}}(undef, H)
+        actions = Vector{Vector{Float64}}(undef, H)
+        rewards = Vector{Float64}(undef, H)
 
+        traj_reward = 0.0
+        for h in 1:H
+            observation = get_state(local_data)
+            states[h] = observation
+            actions[h] = policy(observation, W, b)
 
+            local_data.ctrl .= actions[h]
+            step!(model, local_data)
+
+            traj_reward = hop_reward(local_data)
+            rewards[h] = traj_reward
+        end
+
+        trajectories[n] = (states, actions, rewards)
     end
 
+    return trajectories
+end
+
+function natural_gradient()
+    for k in 1:K
+
+        states, actions, rewards = collect_trajectories(model, data, policy)
+    end
 end
