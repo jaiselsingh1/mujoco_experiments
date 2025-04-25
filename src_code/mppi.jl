@@ -36,6 +36,7 @@ end
 
 # hopper
 function running_cost_hp(data, ctrl)
+    #=
     reward = 0.0
     height = data.qpos[2]
     upright_bonus = 1.0
@@ -46,8 +47,22 @@ function running_cost_hp(data, ctrl)
     else
         reward -= abs(t_height - height)
     end
+    =#
+    reward = 0.0
 
-    return -1.0 * reward
+    fwd_velocity = data.qvel[1]
+    reward += fwd_velocity^3
+
+    upright_bonus = 1.0
+    t_height = 0.0
+    height = data.qpos[2]
+    if height > t_height
+        reward += upright_bonus
+        #reward += 2*abs(height)
+    else
+        reward -= abs(height - t_height)
+    end
+    return -10.0 * reward
 end
 
 function terminal_cost_hp(data, ctrl)
@@ -57,7 +72,7 @@ end
 # K is the number of samples to generate (the number of control sequences)
 # T is the number of time steps
 # λ is the temperature parameter which is able to control exploration vs exploitation ratio
-function mppi(model, data; K=100, T=100, Σ=1.0, Φ=0.0, λ=0.5, q=0.0)
+function mppi(model, data; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0)
     nu = model.nu # number of control inputs
     U = zeros(nu, T)
     S = zeros(K) # S is the costs
