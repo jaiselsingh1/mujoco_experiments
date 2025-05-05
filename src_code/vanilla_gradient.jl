@@ -52,8 +52,9 @@ function RBF(env::HopperModel)
     return RBF_policy
 end
 
-function collect_trajectories(env::HopperModel, policy; N, H, noise_scale=0.1) # N -> number of trajectories ; H -> number of time steps/steps per traj
+function collect_trajectories(env::HopperModel; policy=nothing, N=100, H=1000, noise_scale=0.1) # N -> number of trajectories ; H -> number of time steps/steps per traj
     trajectories = Vector{Any}(undef, N) # states, actions, rewards
+    policy = isnothing(policy) ? RBF(env) : policy
 
     for n in 1:N
         local_data = init_data(env.model)
@@ -84,9 +85,9 @@ function collect_trajectories(env::HopperModel, policy; N, H, noise_scale=0.1) #
 end
 
 function natural_gradient(env::HopperModel)
-    for k in 1:K
+    for k = 1:K
+        trajectories = collect_trajectories(env)
 
-        policy = RBF(env)
-        states, actions, rewards = collect_trajectories(env, policy)
+
     end
 end
