@@ -83,11 +83,3 @@ function collect_trajectories(env::HopperModel; policy=nothing, N=100, H=1000, n
 
     return trajectories
 end
-
-function natural_gradient(env::HopperModel)
-    for k = 1:K
-        trajectories = collect_trajectories(env)
-
-
-    end
-end
