@@ -115,6 +115,18 @@ end
 
 function save_trajectories(trajectories, filename)
     using JLD2
+    save_object = Dict(
+        "num_trajectories" => length(trajectories),
+        "trajectories" => trajectories
+    )
 
+    JLD2.save(filename, save_object)
+    println("Saved $(length(trajectories)) trajectories to $filename")
+end
 
+function load_trajectories(filename)
+    using JLD2
+    data = JLD2.load(filename)
+    println("Loaded $(data["num_trajectories"]) trajectories from $filename")
+    return data["trajectories"]
 end
