@@ -13,6 +13,13 @@ struct HopperModel
     state_dim::Int # size of the state
 end
 
+struct Trajectory
+    states::Matrix{Float64}
+    controls::Matrix{Float64}
+    cost::Float64
+    weight::Float64
+end
+
 function get_state(data)
     return vcat(copy(data.qpos), copy(data.qvel))
 end
@@ -80,7 +87,7 @@ function mppi_traj(env::HopperModel; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0
             step_cost = running_cost_hp(local_data)
             S[k] += step_cost + (λ * inv(Σ) * U[:, t]' * ϵ[k][:, t])
         end
-        S[k] += terminal_cost_hp(data)
+        S[k] += terminal_cost_hp(local_data)
         all_costs[k] = S[k]
     end
 
@@ -101,14 +108,9 @@ function mppi_traj(env::HopperModel; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0
     end
     U[:, T] .= zeros(ν) # re-initialize the last control step
 
-    trajectories = [(
-        states=all_states[k],
-        controls=all_controls[k],
-        cost=all_costs[k],
-        weight=weights[k]
-    ) for k = 1:K]
+    trajectories = [Trajectory(all_states[k], all_controls[k], all_costs[k], weights[k]) for k = 1:K]
 
-    sort!(trajectories, by=traj -> traj.cost)
+    sort!(trajectories, by=traj -> traj.cost) # this is an in-line function call that uses an anonymous function
 
     return U, trajectories
 end
@@ -129,4 +131,22 @@ function load_trajectories(filename)
     data = JLD2.load(filename)
     println("Loaded $(data["num_trajectories"]) trajectories from $filename")
     return data["trajectories"]
+end
+
+function generate_trajectories(env::HopperModel; num_batches=5, top_k=5, save=false, save_path="trajectories.jld2")
+    all_trajectories = Trajectory[]
+
+    for batch in 1:num_batches
+        U, trajectories = mppi_traj(env)
+
+        for k in 1:min(top_k, length(trajectories)) #lowest-cost trajectories
+            push!(all_trajectories, trajectories[k])
+        end
+    end
+
+    if save
+        save_trajectories(all_trajectories, save_path)
+    end
+
+    return all_trajectories
 end
