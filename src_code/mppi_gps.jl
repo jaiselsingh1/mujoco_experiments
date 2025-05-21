@@ -1,14 +1,15 @@
 using MuJoCo: mjData
 # clone one step policy and then action chunk policy -> see if they do something different
 # one step and jacobian policy
-
+using JLD2
 using MuJoCo
 using .Threads
 using LinearAlgebra
+using Base
 
 struct HopperModel
-    model::mjModel
-    data::mjData
+    model::Model
+    data::Data
     ν::Int # number of controls
     state_dim::Int # size of the state
 end
@@ -29,7 +30,7 @@ function hopper_model(model_path="../models/hopper.xml")
     data = init_data(model)
 
     ν = model.nu
-    state_dim = size(get_state(data))
+    state_dim = length(get_state(data))
 
     return HopperModel(model, data, ν, state_dim)
 end
@@ -116,18 +117,15 @@ function mppi_traj(env::HopperModel; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0
 end
 
 function save_trajectories(trajectories, filename)
-    using JLD2
     save_object = Dict(
         "num_trajectories" => length(trajectories),
         "trajectories" => trajectories
     )
-
     JLD2.save(filename, save_object)
     println("Saved $(length(trajectories)) trajectories to $filename")
 end
 
 function load_trajectories(filename)
-    using JLD2
     data = JLD2.load(filename)
     println("Loaded $(data["num_trajectories"]) trajectories from $filename")
     return data["trajectories"]
@@ -150,3 +148,34 @@ function generate_trajectories(env::HopperModel; num_batches=5, top_k=5, save=fa
 
     return all_trajectories
 end
+
+function visualize_trajectory(env::HopperModel, trajectory::Trajectory; fps=60)
+    init_visualiser()
+
+    model = env.model
+    data = init_data(model)
+    reset!(model, data)
+
+    data.qpos .= trajectory.states[1:model.nq, 1]
+    data.qvel .= trajectory.states[model.nq+1:end, 1]
+
+    # Trim states to length T (controls go from 1:T, but states are 1:T+1)
+    trimmed_states = trajectory.states[:, 1:end-1]
+    T = size(trimmed_states, 2)
+    step_ref = Ref(1) # since integers in julia are imumutable so you have to use references instead
+
+    function ctrl!(m, d)
+        if step_ref[] <= T
+            d.ctrl .= trajectory.controls[:, step_ref[]]
+            step_ref[] += 1
+        end
+    end
+
+    Base.invokelatest(visualise!(model, data, controller=ctrl!, trajectories=trimmed_states)) # this is used in order to bypass the limits of the "world" error?
+end
+
+
+
+env = hopper_model()
+trajectories = generate_trajectories(env; num_batches=3, top_k=3)
+visualize_trajectory(env, trajectories[1])  # visualize best trajectory
