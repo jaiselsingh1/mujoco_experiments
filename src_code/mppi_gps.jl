@@ -149,6 +149,7 @@ function generate_trajectories(env::HopperModel; num_batches=5, top_k=5, save=fa
     return all_trajectories
 end
 
+
 function visualize_trajectory(env::HopperModel, trajectory::Trajectory; fps=60)
     init_visualiser()
 
@@ -156,24 +157,29 @@ function visualize_trajectory(env::HopperModel, trajectory::Trajectory; fps=60)
     data = init_data(model)
     reset!(model, data)
 
+    # put the sim in the trajectory’s initial state
     data.qpos .= trajectory.states[1:model.nq, 1]
     data.qvel .= trajectory.states[model.nq+1:end, 1]
 
-    # Trim states to length T (controls go from 1:T, but states are 1:T+1)
     trimmed_states = trajectory.states[:, 1:end-1]
     T = size(trimmed_states, 2)
-    step_ref = Ref(1) # since integers in julia are imumutable so you have to use references instead
+    step_ref = Ref(1)
 
     function ctrl!(m, d)
-        if step_ref[] <= T
+        if step_ref[] ≤ T
             d.ctrl .= trajectory.controls[:, step_ref[]]
             step_ref[] += 1
         end
     end
 
-    Base.invokelatest(visualise!(model, data, controller=ctrl!, trajectories=trimmed_states)) # this is used in order to bypass the limits of the "world" error?
+    Base.invokelatest(
+        visualise!,               # function object
+        model,                    # positional
+        data;                     # positional
+        controller=ctrl!,     # keywords
+        trajectories=trimmed_states
+    )
 end
-
 
 
 env = hopper_model()
