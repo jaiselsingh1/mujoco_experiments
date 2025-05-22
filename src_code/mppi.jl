@@ -35,8 +35,17 @@ function terminal_cost_cp(data, ctrl)
 end
 
 # hopper
+function running_cost_hp(d, u)
+    forward_bonus = -5.0 * d.qvel[1]
+    height_penalty = 2.0 * max(0, 1.1 - d.qpos[2])^2
+    energy_penalty = 0.001 * sum(u .^ 2)
+    return forward_bonus + height_penalty + energy_penalty
+end
+
+terminal_cost_hp(d, u) = 5.0 * running_cost_hp(d, u)
+
+#=
 function running_cost_hp(data, ctrl)
-    #=
     reward = 0.0
     height = data.qpos[2]
     upright_bonus = 1.0
@@ -47,7 +56,7 @@ function running_cost_hp(data, ctrl)
     else
         reward -= abs(t_height - height)
     end
-    =#
+
     reward = 0.0
 
     fwd_velocity = data.qvel[1]
@@ -68,6 +77,11 @@ end
 function terminal_cost_hp(data, ctrl)
     return 5.0 * running_cost_hp(data, ctrl)
 end
+=#
+
+
+
+
 
 # K is the number of samples to generate (the number of control sequences)
 # T is the number of time steps
@@ -90,10 +104,10 @@ function mppi(model, data; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0)
         for t = 1:T
             local_data.ctrl .= clamp.(U[:, t] .+ ϵ[k][:, t], -1.0, 1.0)  # Generate noisy control for this timestep
             step!(model, local_data)
-            S[k] += running_cost_cp(local_data, local_data.ctrl) + (λ * inv(Σ) * U[:, t]' * ϵ[k][:, t])
+            S[k] += running_cost_hp(local_data, local_data.ctrl) + (λ * inv(Σ) * U[:, t]' * ϵ[k][:, t])
         end
 
-        S[k] += terminal_cost_cp(local_data, local_data.ctrl)
+        S[k] += terminal_cost_hp(local_data, local_data.ctrl)
     end
 
     β = minimum(S)
