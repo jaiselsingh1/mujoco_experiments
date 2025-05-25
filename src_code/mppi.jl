@@ -35,51 +35,18 @@ function terminal_cost_cp(data, ctrl)
 end
 
 # hopper
-function running_cost_hp(d, u)
-    forward_bonus = -5.0 * d.qvel[1]
-    height_penalty = 2.0 * max(0, 1.1 - d.qpos[2])^2
-    energy_penalty = 0.001 * sum(u .^ 2)
-    return forward_bonus + height_penalty + energy_penalty
-end
-
-terminal_cost_hp(d, u) = 5.0 * running_cost_hp(d, u)
-
-#=
 function running_cost_hp(data, ctrl)
-    reward = 0.0
-    height = data.qpos[2]
-    upright_bonus = 1.0
-    t_height = 1.0
-    if height > t_height
-        reward += upright_bonus
-        reward += data.qvel[1] #data.qvel[1]*4
-    else
-        reward -= abs(t_height - height)
-    end
-
-    reward = 0.0
-
-    fwd_velocity = data.qvel[1]
-    reward += fwd_velocity^3
-
-    upright_bonus = 1.0
-    t_height = 0.0
-    height = data.qpos[2]
-    if height > t_height
-        reward += upright_bonus
-        #reward += 2*abs(height)
-    else
-        reward -= abs(height - t_height)
-    end
-    return -10.0 * reward
+    cost = 0.0
+    fwd_cost = -20.0 * data.qvel[1] # a negative cost will reward the movement
+    ctrl_cost = 5.0 * sum(ctrl .^ 2)
+    cost += fwd_cost + ctrl_cost
 end
+
 
 function terminal_cost_hp(data, ctrl)
-    return 5.0 * running_cost_hp(data, ctrl)
+    return 0.0
+    # return 10.0 * running_cost_hp(data, ctrl)
 end
-=#
-
-
 
 
 

@@ -36,22 +36,17 @@ function hopper_model(model_path="../models/hopper.xml")
 end
 
 function running_cost_hp(data)
-    reward = 0.0
-    fwd_velocity = data.qvel[1]
-    reward += fwd_velocity^3
-    upright_bonus = 1.0
-    t_height = 0.0
-    height = data.qpos[2]
-    if height > t_height
-        reward += upright_bonus
-    else
-        reward -= abs(height - t_height)
-    end
-    return -10.0 * reward
+    ctrl = data.ctrl
+    cost = 0.0
+    fwd_cost = -20.0 * data.qvel[1] # a negative cost will reward the movement
+    ctrl_cost = 5.0 * sum(ctrl .^ 2)
+    cost += fwd_cost + ctrl_cost
 end
 
+
 function terminal_cost_hp(data)
-    return 5.0 * running_cost_hp(data)
+    return 0.0
+    # return 10.0 * running_cost_hp(data, ctrl)
 end
 
 function mppi_traj(env::HopperModel; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0)
@@ -149,6 +144,54 @@ function generate_trajectories(env::HopperModel; num_batches=5, top_k=5, save=fa
     return all_trajectories
 end
 
+function visualize_trajectories_sequential(env::HopperModel, trajectories::Vector{Trajectory};
+    fps=60, pause_between=1.0, show_info=true)
+
+    # Initialize visualizer once at the beginning
+    init_visualiser()
+
+    for (idx, trajectory) in enumerate(trajectories)
+        if show_info
+            println("\n=== Trajectory $idx / $(length(trajectories)) ===")
+            println("Cost: $(trajectory.cost)")
+            println("Weight: $(trajectory.weight)")
+        end
+
+        model = env.model
+        data = init_data(model)
+
+        # Set initial state
+        data.qpos .= trajectory.states[1:model.nq, 1]
+        data.qvel .= trajectory.states[model.nq+1:end, 1]
+
+        T = size(trajectory.controls, 2)
+
+        step_ref = Ref(1)
+
+        function controller!(m, d)
+            if step_ref[] <= T
+                d.ctrl .= trajectory.controls[:, step_ref[]]
+                step_ref[] += 1
+            end
+        end
+
+        trimmed_states = trajectory.states[:, 1:end-1]
+
+        Base.invokelatest(
+            visualise!,
+            model,
+            data;
+            controller=controller!,
+            trajectories=trimmed_states
+        )
+
+        if idx < length(trajectories)
+            println("Pausing for $pause_between seconds...")
+            sleep(pause_between)
+        end
+    end
+end
+
 
 function visualize_trajectory(env::HopperModel, trajectory::Trajectory; fps=60)
     init_visualiser()
@@ -184,4 +227,5 @@ end
 
 env = hopper_model()
 trajectories = generate_trajectories(env; num_batches=3, top_k=3)
-visualize_trajectory(env, trajectories[1])  # visualize best trajectory
+visualize_trajectories_sequential(env, trajectories)
+# visualize_trajectory(env, trajectories[1])  # visualize best trajectory
