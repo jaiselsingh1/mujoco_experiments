@@ -71,7 +71,8 @@ function mppi_traj(env::HopperModel; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0
         local_data.qpos .= data.qpos
         local_data.qvel .= data.qvel
 
-        all_states[:][k] .= get_state(local_data)
+        all_states[:][k] .= get_physics_state(model, local_data)
+        #all_states[:][k] .= get_state(local_data)
 
         for t in 1:T
             noisy_control = clamp.(U[:, t] + ϵ[k][:, t], -1.0, 1.0)
@@ -79,7 +80,8 @@ function mppi_traj(env::HopperModel; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0
             all_controls[k][:, t] = noisy_control
             step!(model, local_data)
 
-            all_states[k][:, t+1] = get_state(local_data)
+            all_states[k][:, t+1] = get_physics_state(model, local_data)
+            # all_states[k][:, t+1] = get_state(local_data)
             step_cost = running_cost_hp(local_data)
             S[k] += step_cost + (λ * inv(Σ) * U[:, t]' * ϵ[k][:, t])
         end
@@ -144,12 +146,30 @@ function generate_trajectories(env::HopperModel; num_batches=5, top_k=5, save=fa
     return all_trajectories
 end
 
+function visualise_trajectories(env::HopperModel, trajectories::Vector{Trajectory})
+    model = env.model
+    data = init_data(model)
+    init_visualiser()
+    traj_states = Matrix{Float64}[]
+    for trajectory in trajectories
+        push!(traj_states, trajectory.states)
+    end
+
+    Base.invokelatest(visualise!, model, data; trajectories=traj_states)
+    # visualise!(model, data; trajectories=traj_states)
+end
+
+env = hopper_model()
+trajectories = generate_trajectories(env; num_batches=3, top_k=3)
+visualise_trajectories(env, trajectories)
+
+
+
+#=
 function visualize_trajectories_sequential(env::HopperModel, trajectories::Vector{Trajectory};
     fps=60, pause_between=1.0, show_info=true)
 
-    # Initialize visualizer once at the beginning
     init_visualiser()
-
     for (idx, trajectory) in enumerate(trajectories)
         if show_info
             println("\n=== Trajectory $idx / $(length(trajectories)) ===")
@@ -192,7 +212,6 @@ function visualize_trajectories_sequential(env::HopperModel, trajectories::Vecto
     end
 end
 
-
 function visualize_trajectory(env::HopperModel, trajectory::Trajectory; fps=60)
     init_visualiser()
 
@@ -223,9 +242,7 @@ function visualize_trajectory(env::HopperModel, trajectory::Trajectory; fps=60)
         trajectories=trimmed_states
     )
 end
+ =#
 
-
-env = hopper_model()
-trajectories = generate_trajectories(env; num_batches=3, top_k=3)
-visualize_trajectories_sequential(env, trajectories)
+# visualize_trajectories_sequential(env, trajectories)
 # visualize_trajectory(env, trajectories[1])  # visualize best trajectory
