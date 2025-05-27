@@ -146,6 +146,7 @@ function generate_trajectories(env::HopperModel; num_batches=5, top_k=5, save=fa
     return all_trajectories
 end
 
+#=
 function visualise_trajectories(env::HopperModel, trajectories::Vector{Trajectory})
     model = env.model
     data = init_data(model)
@@ -158,10 +159,16 @@ function visualise_trajectories(env::HopperModel, trajectories::Vector{Trajector
     Base.invokelatest(visualise!, model, data; trajectories=traj_states)
     # visualise!(model, data; trajectories=traj_states)
 end
+=#
 
 env = hopper_model()
 trajectories = generate_trajectories(env; num_batches=3, top_k=3)
-visualise_trajectories(env, trajectories)
+
+model = env.model
+data = env.data
+init_visualiser()
+traj_states = getfield.(trajectories, :states)
+visualise!(model, data; trajectories=traj_states)
 
 
 
