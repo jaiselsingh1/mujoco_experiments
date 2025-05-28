@@ -14,6 +14,13 @@ struct HopperModel
     state_dim::Int # size of the state
 end
 
+struct cartpole
+    model::Model
+    data::Data
+    ν::Int
+    state_dim::Int
+end
+
 struct Trajectory
     states::Matrix{Float64}
     controls::Matrix{Float64}
@@ -25,31 +32,51 @@ function get_state(data)
     return vcat(copy(data.qpos), copy(data.qvel))
 end
 
+function cartpole_model(model_path="../models/cartpole.xml")
+    model = load_model(model_path)
+    data = init_data(model)
+
+    ν = model.nu
+    state_dim = length(get_physics_state(model, data))
+
+    return cartpole(model, data, ν, state_dim)
+end
+
 function hopper_model(model_path="../models/hopper.xml")
     model = load_model(model_path)
     data = init_data(model)
 
     ν = model.nu
-    state_dim = length(get_state(data))
+    state_dim = length(get_physics_state(model, data))
 
     return HopperModel(model, data, ν, state_dim)
 end
 
 function running_cost_hp(data)
+    fwd_vel = data.qvel[1]
     ctrl = data.ctrl
-    cost = 0.0
-    fwd_cost = -20.0 * data.qvel[1] # a negative cost will reward the movement
-    ctrl_cost = 5.0 * sum(ctrl .^ 2)
-    cost += fwd_cost + ctrl_cost
+
+    alive_bonus = -1.0
+    velocity_reward = -1.0 * fwd_vel
+    control_cost = 0.001 * sum(ctrl .^ 2)
+
+    cost = alive_bonus + velocity_reward + control_cost
+    return cost
 end
 
 
-function terminal_cost_hp(data)
+function terminal_cost_hp(data; min_height=0.7, max_height=2.0)
+    height = data.qpos[2]
+
+    if height > max_height || height < min_height
+        return 100.0
+    end
+
     return 0.0
     # return 10.0 * running_cost_hp(data, ctrl)
 end
 
-function mppi_traj(env::HopperModel; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0)
+function mppi_traj(env::HopperModel; K=100, T=500, Σ=0.5, Φ=0.0, λ=1.0, q=0.0)
     ν = env.ν # number of control inputs
     state_dim = env.state_dim
     model = env.model
@@ -77,11 +104,10 @@ function mppi_traj(env::HopperModel; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0
         for t in 1:T
             noisy_control = clamp.(U[:, t] + ϵ[k][:, t], -1.0, 1.0)
             local_data.ctrl .= noisy_control
-            all_controls[k][:, t] = noisy_control
+            # all_controls[k][:, t] = noisy_control
             step!(model, local_data)
 
             all_states[k][:, t+1] = get_physics_state(model, local_data)
-            # all_states[k][:, t+1] = get_state(local_data)
             step_cost = running_cost_hp(local_data)
             S[k] += step_cost + (λ * inv(Σ) * U[:, t]' * ϵ[k][:, t])
         end
@@ -99,6 +125,8 @@ function mppi_traj(env::HopperModel; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0
     for t = 1:T
         U[:, t] .+= sum(weights[k] * ϵ[k][:, t] for k = 1:K)
     end
+    data.ctrl .= U[:, 1]
+    step!(model, data)
 
     # shift controls forward
     for t = 2:T
@@ -146,6 +174,16 @@ function generate_trajectories(env::HopperModel; num_batches=5, top_k=5, save=fa
     return all_trajectories
 end
 
+env = hopper_model()
+trajectories = generate_trajectories(env; num_batches=5, top_k=5)
+
+model = env.model
+data = env.data
+init_visualiser()
+traj_states = getfield.(trajectories, :states)
+visualise!(model, data; trajectories=traj_states)
+
+
 #=
 function visualise_trajectories(env::HopperModel, trajectories::Vector{Trajectory})
     model = env.model
@@ -160,17 +198,6 @@ function visualise_trajectories(env::HopperModel, trajectories::Vector{Trajector
     # visualise!(model, data; trajectories=traj_states)
 end
 =#
-
-env = hopper_model()
-trajectories = generate_trajectories(env; num_batches=3, top_k=3)
-
-model = env.model
-data = env.data
-init_visualiser()
-traj_states = getfield.(trajectories, :states)
-visualise!(model, data; trajectories=traj_states)
-
-
 
 #=
 function visualize_trajectories_sequential(env::HopperModel, trajectories::Vector{Trajectory};
