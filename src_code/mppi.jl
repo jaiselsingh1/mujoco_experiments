@@ -45,7 +45,9 @@ function running_cost_hp(data)
 end
 
 function terminal_cost_hp(data)
-    return 0.0
+    h = data.qpos[2]
+
+    return (h < 0.9) ? 500 : 0.0
 end
 
 # K -> number of rollouts to do
@@ -84,7 +86,7 @@ function mppi_traj!(env::HopperModel, planner::MPPIPlanner; K=100, T=500, Σ=1.0
     weights ./= η
 
     for t in 1:T
-        U[:, t] += sum(weights[k] * ϵ[k][:, t] for k = 1:K)
+        planner.U[:, t] += sum(weights[k] * ϵ[k][:, t] for k = 1:K)
     end
 
 end
@@ -92,8 +94,8 @@ end
 
 env = hopper_model()
 init_visualiser()
-T = 100
-planner = MPPIPlanner(zeros(env.ν, T), T)
+T = 150
+planner = MPPIPlanner(0.2 .* randn(env.ν, T), T) # try to warm start the planner/controls
 
 
 function mppi_controller!(m, d)
@@ -101,8 +103,8 @@ function mppi_controller!(m, d)
     mppi_traj!(env, planner)
 
     # act
-    env.data.ctrl .= planner.U[:, 1]
-    step!(m, d)
+    d.ctrl .= planner.U[:, 1]
+    # step!(m, d) apparently the visualiser does the actual stepping when it is called
 
     # shift
     planner.U[:, 1:end-1] .= planner.U[:, 2:end]
