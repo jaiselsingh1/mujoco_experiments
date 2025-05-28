@@ -91,19 +91,6 @@ function mppi_traj!(env::HopperModel, planner::MPPIPlanner; K=100, T=500, Σ=0.5
 
 end
 
-function mppi_step!(planner::MPPIPlanner, env::HopperModel)
-    # plan
-    mppi_traj!(env, planner)
-
-    # act
-    env.data.ctrl .= planner.U[:, 1]
-    step!(env.model, env.data)
-
-    # shift
-    planner.U[:, 1:end-1] .= planner.U[:, 2:end]
-    planner.U[:, end] .= 0.0
-end
-
 
 env = hopper_model()
 init_visualiser()
@@ -111,8 +98,18 @@ T = 100
 planner = MPPIPlanner(zeros(env.ν, T), T)
 reset!(env.model, env.data)
 
-function mppi_controller!(m::Model, d::Data)
-    mppi_step!(planner, env)
+
+function mppi_controller!(m, d)
+    # plan
+    mppi_traj!(env, planner)
+
+    # act
+    env.data.ctrl .= planner.U[:, 1]
+    step!(m, d)
+
+    # shift
+    planner.U[:, 1:end-1] .= planner.U[:, 2:end]
+    planner.U[:, end] .= 0.0
 end
 
 visualise!(env.model, env.data, controller=mppi_controller!)
