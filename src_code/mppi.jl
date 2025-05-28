@@ -11,17 +11,6 @@ struct HopperModel
     state_dim::Int
 end
 
-struct Trajectory
-    states::Matrix{Float64}  # (state_dim, T+1)
-    controls::Matrix{Float64}  # (ν, T)
-    cost::Float64
-    weight::Float64
-end
-
-struct MPPIPlanner # doesn't need to be mutable
-    U::Matrix{Float64}
-    T::Int # number of steps
-end
 
 function hopper_model(model_path="../models/hopper.xml")
     model = load_model(model_path)
@@ -30,6 +19,35 @@ function hopper_model(model_path="../models/hopper.xml")
     state_dim = length(get_physics_state(model, data))
 
     return HopperModel(model, data, ν, state_dim)
+end
+
+struct Cartpole
+    model::Model
+    data::Data
+    ν::Int
+    state_dim::Int
+end
+
+function cartpole_model(model_path="../models/cartpole.xml")
+    model = load_model(model_path)
+    data = init_data(model)
+    ν = model.nu
+    state_dim = length(get_physics_state(model, data))
+
+    return Cartpole(model, data, ν, state_dim)
+end
+
+struct Trajectory
+    states::Matrix{Float64}  # (state_dim, T+1)
+    controls::Matrix{Float64}  # (ν, T)
+    cost::Float64
+    weight::Float64
+end
+
+
+struct MPPIPlanner # doesn't need to be mutable
+    U::Matrix{Float64}
+    T::Int # number of steps
 end
 
 function running_cost_hp(data)
@@ -46,13 +64,34 @@ end
 
 function terminal_cost_hp(data)
     h = data.qpos[2]
-
     return (h < 0.9) ? 500 : 0.0
 end
 
+function running_cost_cartpole(d)
+    ctrl = d.ctrl
+    x = d.qpos[1]
+    θ = d.qpos[2]
+    x_dot = d.qvel[1]
+    θ_dot = d.qvel[2]
+
+    pos_cost = 1.0 * x^2
+    theta_cost = 20.0 * (cos(θ) - 1.0)^2
+    vel_cost = 0.1 * x_dot^2
+    thetadot_cost = 0.1 * (θ_dot)^2
+    ctrl_cost = ctrl[1]^2
+
+    return (pos_cost + theta_cost + vel_cost + thetadot_cost + ctrl_cost)
+
+end
+
+function terminal_cost_cartpole(d)
+    return 10.0 * running_cost_cartpole(d)
+end
+
+
 # K -> number of rollouts to do
 # T -> number of steps per rollout
-function mppi_traj!(env::HopperModel, planner::MPPIPlanner; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0) # planning
+function mppi_traj!(env, planner::MPPIPlanner; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0) # planning
     ν = env.ν
     U = planner.U
     T = planner.T
@@ -74,10 +113,10 @@ function mppi_traj!(env::HopperModel, planner::MPPIPlanner; K=100, T=500, Σ=1.0
             local_d.ctrl .= noisy_control
             step!(model, local_d)
 
-            step_cost = running_cost_hp(local_d)
+            step_cost = running_cost_cartpole(local_d)
             S[k] += step_cost + (λ * inv(Σ) * U[:, t]' * ϵ[k][:, t])
         end
-        S[k] += terminal_cost_hp(local_d)
+        S[k] += terminal_cost_cartpole(local_d)
     end
 
     β = minimum(S)
@@ -92,7 +131,7 @@ function mppi_traj!(env::HopperModel, planner::MPPIPlanner; K=100, T=500, Σ=1.0
 end
 
 
-env = hopper_model()
+env = cartpole_model()
 init_visualiser()
 T = 150
 planner = MPPIPlanner(0.2 .* randn(env.ν, T), T) # try to warm start the planner/controls
