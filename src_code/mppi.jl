@@ -37,7 +37,7 @@ function running_cost_hp(data)
     ctrl = data.ctrl
 
     alive_bonus = -1.0
-    velocity_reward = -10.0 * fwd_vel
+    velocity_reward = -100.0 * fwd_vel
     control_cost = 0.001 * sum(ctrl .^ 2)
 
     cost = alive_bonus + velocity_reward + control_cost
@@ -86,7 +86,7 @@ function mppi_traj!(env::HopperModel, planner::MPPIPlanner; K=100, T=500, Σ=0.5
     weights ./= η
 
     for t in 1:T
-        planner.U[:, t] .+= sum(weights[k] * ϵ[k][:, t] for k = 1:K)
+        planner.U[:, t] += sum(weights[k] * ϵ[k][:, t] for k = 1:K)
     end
 
 end
