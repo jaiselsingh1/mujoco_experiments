@@ -50,7 +50,7 @@ end
 
 # K -> number of rollouts to do
 # T -> number of steps per rollout
-function mppi_traj!(env::HopperModel, planner::MPPIPlanner; K=100, T=500, Σ=0.5, Φ=0.0, λ=1.0, q=0.0) # planning
+function mppi_traj!(env::HopperModel, planner::MPPIPlanner; K=100, T=500, Σ=1.0, Φ=0.0, λ=1.0, q=0.0) # planning
     ν = env.ν
     U = planner.U
     T = planner.T
@@ -60,8 +60,6 @@ function mppi_traj!(env::HopperModel, planner::MPPIPlanner; K=100, T=500, Σ=0.5
 
     ϵ = [randn(ν, T) for _ in 1:K] # noise samples
     S = zeros(K) # costs
-    w = zeros(K) # weights
-
 
     local_datas = [init_data(model) for _ in 1:Threads.nthreads()]
     @threads for k in 1:K
@@ -86,7 +84,7 @@ function mppi_traj!(env::HopperModel, planner::MPPIPlanner; K=100, T=500, Σ=0.5
     weights ./= η
 
     for t in 1:T
-        planner.U[:, t] += sum(weights[k] * ϵ[k][:, t] for k = 1:K)
+        U[:, t] += sum(weights[k] * ϵ[k][:, t] for k = 1:K)
     end
 
 end
@@ -96,7 +94,6 @@ env = hopper_model()
 init_visualiser()
 T = 100
 planner = MPPIPlanner(zeros(env.ν, T), T)
-reset!(env.model, env.data)
 
 
 function mppi_controller!(m, d)
@@ -112,4 +109,5 @@ function mppi_controller!(m, d)
     planner.U[:, end] .= 0.0
 end
 
+reset!(env.model, env.data)
 visualise!(env.model, env.data, controller=mppi_controller!)
