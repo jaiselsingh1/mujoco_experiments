@@ -112,7 +112,6 @@ function mppi_traj!(env, planner::MPPIPlanner; K=100, T=500, Σ=1.0, Φ=0.0, λ=
             S[k] += step_cost + (λ * inv(Σ) * U[:, t]' * ϵ[k][:, t])
         end
         S[k] += terminal_cost_cartpole(local_d)
-
     end
 
     β = minimum(S)
@@ -126,7 +125,6 @@ function mppi_traj!(env, planner::MPPIPlanner; K=100, T=500, Σ=1.0, Φ=0.0, λ=
 
 end
 
-
 function save_trajectories(trajectories, filename)
     JLD2.@save(filename, trajectories)
     println("trajectories saved to $filename")
@@ -138,7 +136,10 @@ function load_trajectories(filename)
     return trajectories
 end
 
-function mppi_controller!(m, d)
+function mppi_controller!(env, planner::MPPIPlanner)
+    m = env.model
+    d = env.data
+
     # plan
     mppi_traj!(env, planner)
 
@@ -157,29 +158,38 @@ function generate_trajectories(env, planner::MPPIPlanner; T=100, num_trajs=5)
 
     all_trajs = Trajectory[]
 
-    for traj in 1:num_trajs
-        reset!(m,d)
+    for traj_idx in 1:num_trajs
+        reset!(m, d)
+
+        # Reset planner
+        planner.U .= 0.2 .* randn(env.ν, planner.T)
 
         states = zeros(env.state_dim, T)
         controls = zeros(env.ν, T)
 
         for t in 1:T
-            controls[:, t] = d.ctrl
             states[:, t] = get_physics_state(m, d)
-            step!(m,d)
+            mppi_controller!(env, planner)
+            controls[:, t] = d.ctrl
+            step!(m, d)
         end
 
         traj = Trajectory(states, controls)
         push!(all_trajs, traj)
+
+        println("Trajectory $traj_idx completed")
     end
 
     return all_trajs
 end
 
+
 init_visualiser()
 env = cartpole_model()
 T = 100
-planner = MPPIPlanner(0.2 .* randn(env.ν, T), T) # try to warm start the planner/controls (COULD MAKE THIS INTO A KWARG)
-all_trajs = generate_trajectories(env, planner; T=T)
+horizon = 50
+planner = MPPIPlanner(0.2 .* randn(env.ν, horizon), horizon)
+
+all_trajs = generate_trajectories(env, planner; T=T, num_trajs=5)
 all_states = [traj.states for traj in all_trajs]
 visualise!(env.model, env.data; trajectories = all_states)
