@@ -94,11 +94,6 @@ function mppi_traj!(env, planner::MPPIPlanner; K=100, T=500, Σ=1.0, Φ=0.0, λ=
     model = env.model
     data = env.data
 
-    # for saving trajectories
-    state_dim = env.state_dim
-    all_states = [zeros(state_dim, T+1) for _ in 1:K]
-    all_controls = [zeros(ν, T) for _ in 1:K]
-
     ϵ = [randn(ν, T) for _ in 1:K] # noise samples
     S = zeros(K) # costs
 
@@ -108,15 +103,10 @@ function mppi_traj!(env, planner::MPPIPlanner; K=100, T=500, Σ=1.0, Φ=0.0, λ=
         local_d.qpos .= data.qpos
         local_d.qvel .= data.qvel
 
-        all_states[k][:, 1] .= get_physics_state(model, local_d)
-
         for t in 1:T
             noisy_control = clamp.(U[:, t] + ϵ[k][:, t], -1.0, 1.0)
             local_d.ctrl .= noisy_control
             step!(model, local_d)
-
-            all_controls[k][:, t] .= noisy_control
-            all_states[k][:, t+1] .= get_physics_state(model, local_d)
 
             step_cost = running_cost_cartpole(local_d)
             S[k] += step_cost + (λ * inv(Σ) * U[:, t]' * ϵ[k][:, t])
@@ -134,12 +124,8 @@ function mppi_traj!(env, planner::MPPIPlanner; K=100, T=500, Σ=1.0, Φ=0.0, λ=
         planner.U[:, t] += sum(weights[k] * ϵ[k][:, t] for k = 1:K)
     end
 
-    best_k = argmin(S)
-    return Trajectory(all_states[best_k], all_controls[best_k])
 end
 
-function generate_trajectories()
-end
 
 function save_trajectories(trajectories, filename)
     JLD2.@save(filename, trajectories)
@@ -152,16 +138,9 @@ function load_trajectories(filename)
     return trajectories
 end
 
-env = cartpole_model()
-init_visualiser()
-T = 100
-planner = MPPIPlanner(0.2 .* randn(env.ν, T), T) # try to warm start the planner/controls
-all_trajectories = Trajectory[]
-
 function mppi_controller!(m, d)
     # plan
-    best_traj = mppi_traj!(env, planner)
-    push!(all_trajectories, best_traj)
+    mppi_traj!(env, planner)
 
     # act
     d.ctrl .= planner.U[:, 1]
@@ -172,6 +151,39 @@ function mppi_controller!(m, d)
     planner.U[:, end] .= 0.0
 end
 
-reset!(env.model, env.data)
-visualise!(env.model, env.data, controller=mppi_controller!)
-save_trajectories(all_trajectories, "trajectories.JLD2")
+function generate_trajectories(num_trajs=5)
+    env = cartpole_model()
+    m = env.model
+    d = env.data
+
+    T = 100
+    planner = MPPIPlanner(0.2 .* randn(env.ν, T), T) # try to warm start the planner/controls (COULD MAKE THIS INTO A KWARG)
+
+    all_trajs = []
+
+    for traj in 1:num_trajs
+        reset!(m,d)
+
+        states = zeros(env.state_dim, T)
+        controls = zeros(env.ν, T)
+
+        for t in 1:T
+            controls[:, t] = d.ctrl
+            states[:, t] = get_physics_state(m, d)
+            step!(m,d)
+        end
+
+        trajectory = Trajectory(states, controls)
+        push!(all_trajs, trajectory)
+
+    end
+
+    all_states = [traj.states for traj in all_trajs]
+
+
+    reset!(m, d)
+    visualise!(m,d,controller=mppi_controller!,trajectories=all_states)
+
+end
+
+generate_trajectories(5)
