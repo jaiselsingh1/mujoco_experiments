@@ -151,13 +151,9 @@ function mppi_controller!(m, d)
     planner.U[:, end] .= 0.0
 end
 
-function generate_trajectories(num_trajs=5)
-    env = cartpole_model()
+function generate_trajectories(env, planner::MPPIPlanner; T=100, num_trajs=5)
     m = env.model
     d = env.data
-
-    T = 100
-    planner = MPPIPlanner(0.2 .* randn(env.ν, T), T) # try to warm start the planner/controls (COULD MAKE THIS INTO A KWARG)
 
     all_trajs = Trajectory[]
 
@@ -182,6 +178,8 @@ end
 
 init_visualiser()
 env = cartpole_model()
-all_trajs = generate_trajectories(5)
+T = 100
+planner = MPPIPlanner(0.2 .* randn(env.ν, T), T) # try to warm start the planner/controls (COULD MAKE THIS INTO A KWARG)
+all_trajs = generate_trajectories(env, planner; T=T)
 all_states = [traj.states for traj in all_trajs]
 visualise!(env.model, env.data; trajectories = all_states)
