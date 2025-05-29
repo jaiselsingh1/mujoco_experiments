@@ -187,8 +187,7 @@ end
 init_visualiser()
 env = cartpole_model()
 T = 100
-horizon = 50
-planner = MPPIPlanner(0.2 .* randn(env.ν, horizon), horizon)
+planner = MPPIPlanner(0.2 .* randn(env.ν, T), T)
 
 all_trajs = generate_trajectories(env, planner; T=T, num_trajs=5)
 all_states = [traj.states for traj in all_trajs]
