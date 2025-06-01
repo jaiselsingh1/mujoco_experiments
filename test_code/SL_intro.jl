@@ -1,19 +1,21 @@
 using SimpleChains, Random, Optimisers, Zygote, Plots, Statistics
+using NNlib: relu, sigmoid, leakyrelu
 
 function train_sine(; N=200,
-    hidden=16,
+    hidden=128,
     epochs=1_000,
     η=1e-3,
-    seed=0)
+    seed=0,
+    activation=tanh)
     Random.seed!(seed)
-    x_data = 2π .* rand(Float32, N)
+    x_data = 4π .* rand(Float32, N)
     y_data = sin.(x_data)
     x_train = reshape(x_data, 1, :)
     y_train = reshape(y_data, 1, :)
 
     chain = SimpleChain(static(1),
-        TurboDense(tanh, hidden),
-        TurboDense(tanh, hidden),
+        TurboDense(activation, hidden),
+        TurboDense(activation, hidden),
         TurboDense(identity, 1))
 
     weights = SimpleChains.init_params(chain, Float32)
@@ -21,9 +23,12 @@ function train_sine(; N=200,
 
     opt = Optimisers.Adam(η)
     state = Optimisers.setup(opt, weights)
-
     for epoch in 1:epochs
-        g = Zygote.gradient(w -> loss(w, x_train, y_train), weights)
+        indices = randperm(N)
+        x_shuffled = x_train[:, indices]
+        y_shuffled = y_train[:, indices]
+
+        g = Zygote.gradient(w -> loss(w, x_shuffled, y_shuffled), weights)
         state, weights = Optimisers.update(state, weights, g[1])
         epoch % 100 == 0 && @info "epoch=$epoch  loss=$(loss(weights, x_train, y_train))"
     end
@@ -31,10 +36,23 @@ function train_sine(; N=200,
     return chain, weights
 end
 
-chain, weights = train_sine()
-x_plot = range(0.0f0, 2.0f0 * π; length=200)
-y_pred = chain(reshape(Float32.(collect(x_plot)), 1, :), weights)
+@time chain, weights = train_sine()
+x_plot = range(0.0f0, 4.0f0 * π; length=200)
+y_pred_tanh = chain(reshape(Float32.(collect(x_plot)), 1, :), weights)
+
+chain2, weights2 = train_sine(activation=relu)
+y_pred_relu = chain2(reshape(Float32.(collect(x_plot)), 1, :), weights2)
+
+chain3, weights3 = train_sine(activation=x -> (2 * sigmoid(x) - 1))
+y_pred_sigmoid = chain3(reshape(Float32.(collect(x_plot)), 1, :), weights3)
+
+chain4, weights4 = train_sine(activation=leakyrelu)
+y_pred_leakyrelu = chain4(reshape(Float32.(collect(x_plot)), 1, :), weights4)
+
 p = plot(x_plot, sin.(x_plot); label="True sin(x)", lw=2)
-plot!(x_plot, vec(y_pred); label="Network", lw=2, ls=:dash)
+plot!(x_plot, vec(y_pred_tanh); label="tanh", lw=2, ls=:dash)
+plot!(x_plot, vec(y_pred_relu); label="relu", lw=2, ls=:dash)
+plot!(x_plot, vec(y_pred_sigmoid); label="sigmoid", lw=2, ls=:dash)
+plot!(x_plot, vec(y_pred_leakyrelu); label="leaky relu", lw=2, ls=:dash)
 display(p)
 readline()
