@@ -1,12 +1,12 @@
 using MuJoCo
 using UnicodePlots
 
-const force_bins = collect(range(-10.0, 10.0; length=3))
+const force_bins = collect(range(-1.0, 1.0; length=3))
 const ϵ_start = 0.3
 const ϵ_decay = 0.999
-const α = 0.3
+const α = 0.2
 const γ = 0.99
-const episodes = 8_000
+const episodes = 10_000
 const T = 300
 
 const x_bins = collect(range(-2.4, 2.4; length=11))
@@ -50,6 +50,7 @@ function train_q_learning()
         ix, ixd, ia, iv = x_idx(x), x_dot_idx(x_dot), angle_idx(θ), vel_idx(θ_dot)
 
         for t in 1:T
+            # off-policy TD learning
             a_idx = rand() < ϵ ? rand(1:na) : argmax(Q[ix, ixd, ia, iv, :])
 
             d.ctrl .= force_bins[a_idx]
@@ -59,7 +60,11 @@ function train_q_learning()
             x_dot_new, θ_dot_new = d.qvel[1], d.qvel[2]
             ix2, ixd2, ia2, iv2 = x_idx(x_new), x_dot_idx(x_dot_new), angle_idx(θ_new), vel_idx(θ_dot_new)
 
-            reward = cos(θ_new)
+            angle_reward = cos(θ_new)
+            pos_penalty = 0.1 * abs(x_new)
+            angle_vel_penalty = 0.05 * abs(θ_dot_new)
+            pos_vel_penalty = 0.05 * abs(x_dot_new)
+            reward = angle_reward - pos_penalty - angle_vel_penalty - pos_vel_penalty
             ep_reward += reward
 
             Q[ix, ixd, ia, iv, a_idx] += α * (reward + γ * maximum(Q[ix2, ixd2, ia2, iv2, :]) - Q[ix, ixd, ia, iv, a_idx])
