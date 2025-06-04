@@ -1,18 +1,18 @@
 using MuJoCo
 using UnicodePlots
 
-const force_bins = collect(range(-1.0, 1.0; length=3))
-const ϵ_start = 0.3
+const force_bins = collect(range(-1.0, 1.0; length=21))
+const ϵ_start = 0.45
 const ϵ_decay = 0.999
 const α = 0.2
 const γ = 0.99
-const episodes = 10_000
+const episodes = 15_000
 const T = 300
 
-const x_bins = collect(range(-2.4, 2.4; length=11))
-const x_dot_bins = collect(range(-4, 4; length=11))
-const angle_bins = collect(range(-π/4, π/4; length=11))
-const vel_bins = collect(range(-2, 2; length=11))
+const x_bins = collect(range(-2.4, 2.4; length=21))
+const x_dot_bins = collect(range(-4, 4; length=21))
+const angle_bins = collect(range(-π/2, π/2; length=21))
+const vel_bins = collect(range(-2, 2; length=21))
 
 const ns_x = length(x_bins)
 const ns_xd = length(x_dot_bins)
