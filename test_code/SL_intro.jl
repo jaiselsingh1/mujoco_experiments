@@ -10,13 +10,13 @@ function train_sine(; N=200,
     tolerance=1e-6)
     Random.seed!(seed)
     x_data = 4π .* rand(Float32, N)
-    y_data = sin.(x_data)
+    y_data = 4 .* sin.(x_data) .+ 10
     x_train = reshape(x_data, 1, :)
     y_train = reshape(y_data, 1, :)
 
     chain = SimpleChain(static(1),
         TurboDense(activation, hidden),
-        TurboDense(activation, hidden),
+        #TurboDense(activation, hidden),
         TurboDense(identity, 1))
 
     weights = SimpleChains.init_params(chain, Float32)
@@ -54,7 +54,7 @@ function plot_activation(activation)
     x_plot = range(0.0f0, 6.0f0 * π; length=200)
     y_pred = chain(reshape(Float32.(collect(x_plot)), 1, :), weights)
 
-    p = plot(x_plot, sin.(x_plot); label="True sin(x)", lw=2)
+    p = plot(x_plot, 4 * sin.(x_plot) .+ 10; label="True sin(x)", lw=2)
     plot!(x_plot, vec(y_pred); label="$activation activation", lw=2, ls=:dash)
     display(p)
     readline()
