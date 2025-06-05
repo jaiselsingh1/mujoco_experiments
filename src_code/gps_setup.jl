@@ -3,13 +3,13 @@ using SimpleChains, Random, Optimisers, Zygote, Plots, Statistics
 include("mppi_gps.jl")
 using .MPPI
 
-function policy_network(env)
+function policy_network(env; activation=tanh, hidden=64)
     state_dim = env.state_dim
     action_dim = env.ν
     policy = SimpleChain(static(state_dim),
-                        TurboDense(tanh, 32),
-                        TurboDense(tanh, 16),
-                        TurboDense(identity, action_dim))
+        TurboDense(activation, hidden),
+        TurboDense(activation, hidden),
+        TurboDense(identity, action_dim))
     return policy
 end
 
@@ -18,14 +18,14 @@ function extract_trajectories(trajectories)
     all_actions = []
 
     for traj in trajectories
-        for i in 1:(length(traj.states))
-            push!(all_states, traj.states[i])
-            push!(all_actions, traj.controls[i])
-        end
+        push!(all_states, traj.states)
+        push!(all_actions, traj.controls)
     end
+
     states = hcat(all_states...)
     actions = hcat(all_actions...)
     return states, actions
+
 end
 
 function train_policy!(policy, trajectories; epochs=1000, lr=0.001)
@@ -51,10 +51,8 @@ function train_policy!(policy, trajectories; epochs=1000, lr=0.001)
             @info "epoch=$epoch  loss=$current_loss"
         end
     end
-
     return policy, weights
 end
-
 
 trajectories = load_trajectories("trajectories.jld2")
 env = cartpole_model()
@@ -63,19 +61,16 @@ policy = policy_network(env)
 
 
 policy, weights = train_policy!(policy, trajectories)
-
-function create_trained_controller(policy, weights)
-    return function trained_policy_controller!(model, data)
-        state = get_physics_state(model, data)
-        data.ctrl .= policy(state, weights)
-        nothing
-    end
+function trained_policy_controller!(model, data)
+    state = get_physics_state(model, data)
+    data.ctrl .= policy(state, weights)
+    nothing
 end
 
-controller = create_trained_controller(policy, weights)
-mj_resetData(model, data)
+reset!(model, data)
 init_visualiser()
-visualise!(model, data, controller=controller)
+visualise!(model, data, controller=trained_policy_controller!)
+
 
 
 
