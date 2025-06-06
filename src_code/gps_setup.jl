@@ -27,16 +27,17 @@ function extract_trajectories(trajectories)
     return states, actions
 end
 
-function train_policy!(policy, trajectories; epochs=1000, lr=0.001, batch_size=10)
+function train_policy!(policy, trajectories; epochs=1000, lr=0.01, batch_size=25)
     weights = SimpleChains.init_params(policy, Float32)
     loss(weights, states, actions) = mean(abs2, policy(states, weights) .- actions)
 
+    #these are the dataset that we are doing BC on
     states, actions = extract_trajectories(trajectories)
+
     num_samples = size(states, 2) # 4 states for 100, time steps hence 100 samples
 
     opt = Optimisers.Adam(lr)
     opt_state = Optimisers.setup(opt, weights)
-
 
     for epoch in 1:epochs
         indices = randperm(num_samples)
@@ -61,7 +62,7 @@ function train_policy!(policy, trajectories; epochs=1000, lr=0.001, batch_size=1
     return policy, weights
 end
 
-trajectories = load_trajectories("trajectories.jld2")
+starting_states, trajectories = load_trajectories("trajectories.jld2")
 env = cartpole_model()
 model, data = env.model, env.data
 policy = policy_network(env)

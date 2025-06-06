@@ -133,15 +133,15 @@ function mppi_traj!(env, planner::MPPIPlanner; K=100, T=500, Σ=1.0, Φ=0.0, λ=
 
 end
 
-function save_trajectories(trajectories, filename)
-    JLD2.@save(filename, trajectories)
+function save_trajectories(starting_states, trajectories, filename)
+    JLD2.@save(filename, starting_states, trajectories)
     println("trajectories saved to $filename")
 end
 
 function load_trajectories(filename)
-    JLD2.@load(filename, trajectories)
+    JLD2.@load(filename, starting_states, trajectories)
     println("trajectories loaded from $filename")
-    return trajectories
+    return starting_states, trajectories
 end
 
 function mppi_controller!(env, planner::MPPIPlanner)
@@ -165,9 +165,19 @@ function generate_trajectories(env, planner::MPPIPlanner; T=100, num_trajs=5)
     d = env.data
 
     all_trajs = Trajectory[]
+    starting_states = []
 
     for traj_idx in 1:num_trajs
         reset!(m, d)
+
+        pos_noise = 0.1 * randn(length(d.qpos))
+        vel_noise = 0.1 * randn(length(d.qvel))
+
+        d.qpos .+= pos_noise
+        d.qvel .+= vel_noise
+        initial_state = get_physics_state(m, d)
+
+        push!(starting_states, initial_state)
 
         # Reset planner
         planner.U .= 0.2 .* randn(env.ν, planner.T)
@@ -188,7 +198,7 @@ function generate_trajectories(env, planner::MPPIPlanner; T=100, num_trajs=5)
         println("Trajectory $traj_idx completed")
     end
 
-    return all_trajs
+    return starting_states, all_trajs
 end
 
 
@@ -196,10 +206,9 @@ init_visualiser()
 env = cartpole_model()
 T = 100
 planner = MPPIPlanner(0.2 .* randn(env.ν, T), T)
-
 #=
-all_trajs = generate_trajectories(env, planner; T=T, num_trajs=10)
-save_trajectories(all_trajs, "trajectories.jld2")
+starting_states, all_trajs = generate_trajectories(env, planner; T=T, num_trajs=100)
+save_trajectories(starting_states, all_trajs, "trajectories.jld2")
 all_states = [traj.states for traj in all_trajs]
 visualise!(env.model, env.data; trajectories=all_states)
 =#
