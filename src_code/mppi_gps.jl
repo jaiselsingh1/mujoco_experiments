@@ -170,8 +170,8 @@ function generate_trajectories(env, planner::MPPIPlanner; T=100, num_trajs=5)
     for traj_idx in 1:num_trajs
         reset!(m, d)
 
-        pos_noise = 0.1 * randn(length(d.qpos))
-        vel_noise = 0.1 * randn(length(d.qvel))
+        pos_noise = 0.5 * randn(length(d.qpos))
+        vel_noise = 0.5 * randn(length(d.qvel))
 
         d.qpos .+= pos_noise
         d.qvel .+= vel_noise
