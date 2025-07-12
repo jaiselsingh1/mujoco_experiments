@@ -90,6 +90,7 @@ end
 struct Trajectory
     states::Matrix{Float64}
     controls::Matrix{Float64}
+    costs::Vector{Float64}
 end
 
 # K -> number of rollouts to do
@@ -184,15 +185,17 @@ function generate_trajectories(env, planner::MPPIPlanner; T=100, num_trajs=5)
 
         states = zeros(env.state_dim, T)
         controls = zeros(env.ν, T)
+        costs = zeros(T)
 
         for t in 1:T
             states[:, t] = get_physics_state(m, d)
             mppi_controller!(env, planner)
             controls[:, t] = d.ctrl
+            costs[t] = running_cost_cartpole(d)
             step!(m, d)
         end
 
-        traj = Trajectory(states, controls)
+        traj = Trajectory(states, controls, costs)
         push!(all_trajs, traj)
 
         println("Trajectory $traj_idx completed")
