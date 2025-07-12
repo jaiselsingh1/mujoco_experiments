@@ -195,6 +195,8 @@ function generate_trajectories(env, planner::MPPIPlanner; T=100, num_trajs=5)
             step!(m, d)
         end
 
+        costs[end] += terminal_cost_cartpole(d)
+
         traj = Trajectory(states, controls, costs)
         push!(all_trajs, traj)
 
